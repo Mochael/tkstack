@@ -45,6 +45,7 @@
     "maui": "npm:@tanishqkancharla/maui@0.0.16",
     "md4x": "^0.0.29",
     "purse-styles": "^0.2.3",
+    "pyright": "1.1.400",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "tsx": "^4.23.13",
