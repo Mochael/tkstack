@@ -101,14 +101,11 @@ const styles = {
       "&[data-change='+']": { backgroundColor: colors.green[3] },
       "&[data-change='-']": { backgroundColor: colors.red[3] },
       "&[aria-pressed]": { cursor: "pointer" },
-      "&[aria-pressed]:hover": { backgroundColor: colors.gray[3] },
-      "&[aria-pressed][data-change='+']:hover": {
-        backgroundColor: colors.green[4],
+      "&[aria-pressed]:hover": { backgroundColor: colors.blue[2] },
+      "&[aria-pressed='true'], &[aria-pressed='true']:hover": {
+        backgroundColor: colors.blue[3],
+        boxShadow: `inset 4px 0 ${colors.blue[9]}`,
       },
-      "&[aria-pressed][data-change='-']:hover": {
-        backgroundColor: colors.red[4],
-      },
-      "&[aria-pressed='true']": { boxShadow: `inset 4px 0 ${colors.amber[9]}` },
       "& .stack-content": {
         display: "flex",
         alignItems: "stretch",

@@ -103,14 +103,16 @@ const styles = {
     "& .source-target": { cursor: "pointer" },
     "& .source-hit": { pointerEvents: "stroke" },
     "& .source-node:hover > g > rect, & .source-node:hover > g > polygon": {
-      fill: colors.gray[3],
+      fill: colors.blue[2],
+      stroke: colors.blue[8],
+      strokeWidth: 2,
     },
     "& .source-node[aria-pressed='true'] > g > rect, & .source-node[aria-pressed='true'] > g > polygon":
-      { stroke: colors.amber[9], strokeWidth: 3 },
-    "& .source-edge:hover > .edge, & .source-edge:hover > .message > line, & .source-edge:hover > .message > polyline":
-      { stroke: colors.amber[8], strokeWidth: 3 },
-    "& .source-edge[aria-pressed='true'] > .edge, & .source-edge[aria-pressed='true'] > .message > line, & .source-edge[aria-pressed='true'] > .message > polyline":
-      { stroke: colors.amber[9], strokeWidth: 3 },
+      { fill: colors.blue[3], stroke: colors.blue[9], strokeWidth: 2 },
+    "& .source-edge:hover > .edge, & .source-edge:hover > .message > line, & .source-edge:hover > .message > polyline, & .source-edge:hover > .class-relationship, & .source-edge:hover > .er-relationship":
+      { stroke: colors.blue[8], strokeWidth: 1.5 },
+    "& .source-edge[aria-pressed='true'] > .edge, & .source-edge[aria-pressed='true'] > .message > line, & .source-edge[aria-pressed='true'] > .message > polyline, & .source-edge[aria-pressed='true'] > .class-relationship, & .source-edge[aria-pressed='true'] > .er-relationship":
+      { stroke: colors.blue[9], strokeWidth: 2 },
     "& svg": {
       display: "block",
       width: "100%",

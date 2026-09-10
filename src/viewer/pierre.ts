@@ -10,11 +10,11 @@ export const sourceSelectionCss = `
   --diffs-computed-selected-line-bg: var(--diffs-computed-diff-line-bg);
 }
 [data-line][data-selected-line] {
-  box-shadow: inset 4px 0 ${colors.amber[9]};
+  box-shadow: inset 4px 0 ${colors.blue[9]};
 }
 [data-column-number][data-selected-line] {
-  background-color: ${colors.amber[3]};
-  color: ${colors.amber[12]};
+  background-color: ${colors.blue[3]};
+  color: ${colors.blue[12]};
 }
 `;
 

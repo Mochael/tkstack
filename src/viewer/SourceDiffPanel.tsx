@@ -213,6 +213,7 @@ export function SourceDiffPanel(props: {
                 {selection.annotation.references.map((reference, index) => (
                   <Button
                     key={index}
+                    variantColor="blue"
                     variant={
                       reference === selection.reference ? "primary" : "quiet"
                     }

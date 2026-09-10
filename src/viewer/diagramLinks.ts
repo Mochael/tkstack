@@ -7,6 +7,12 @@ export function linkDiagram(
   focusClass: string,
 ) {
   const document = new DOMParser().parseFromString(svg, "image/svg+xml");
+  for (const markerPart of document.querySelectorAll("marker *")) {
+    if (markerPart.getAttribute("fill") === "var(--_arrow)")
+      markerPart.setAttribute("fill", "context-stroke");
+    if (markerPart.getAttribute("stroke") === "var(--_arrow)")
+      markerPart.setAttribute("stroke", "context-stroke");
+  }
   const edges = [
     ...document.querySelectorAll<SVGElement>(
       ".edge, .message, .class-relationship, .er-relationship",

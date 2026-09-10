@@ -7,7 +7,7 @@ import { startServer } from "./serve.js";
 
 const cli = Cli.create("tkstack", {
   description: "Serve a spec or code walkthrough as a local page",
-  version: "0.1.1",
+  version: "0.1.2",
   args: z.object({
     file: z.string().describe("Path to the markdown file"),
   }),
