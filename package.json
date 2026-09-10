@@ -9,7 +9,7 @@
     "url": "git+https://github.com/tanishqkancharla/tkstack.git"
   },
   "bin": {
-    "tkstack": "./bin.js"
+    "tkstack": "bin.js"
   },
   "files": [
     "bin.js",
