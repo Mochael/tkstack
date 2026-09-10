@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { backgroundColor, colors, fontFamily, focusRing } from "maui";
+import { backgroundColor, colors, fontFamily } from "maui";
 import { style, useStyles } from "purse-styles";
 import { mermaidSvg } from "../mermaid.js";
 import type { DiagramAnnotation } from "../diagramAnnotations.js";
@@ -14,7 +14,6 @@ export function MermaidBlock(
 ) {
   const container = useRef<HTMLDivElement>(null);
   const shell = useStyles(styles.shell);
-  const focus = useStyles(focusRing());
   const svg = useMemo(
     () =>
       mermaidSvg({
@@ -30,9 +29,8 @@ export function MermaidBlock(
     [props.source],
   );
   const linked = useMemo(
-    () =>
-      svg instanceof Error ? svg : linkDiagram(svg, props.annotations, focus),
-    [svg, props.annotations, focus],
+    () => (svg instanceof Error ? svg : linkDiagram(svg, props.annotations)),
+    [svg, props.annotations],
   );
   // React replaces innerHTML when this object changes, which drops SVG focus.
   const html = useMemo(
@@ -101,14 +99,19 @@ const styles = {
     border: 0,
     boxShadow: "none",
     "& .source-target": { cursor: "pointer" },
+    "& .source-target:focus, & .source-target:focus-visible": {
+      outline: "none",
+    },
     "& .source-hit": { pointerEvents: "stroke" },
     "& .source-node:hover > g > rect, & .source-node:hover > g > polygon": {
       fill: colors.blue[2],
       stroke: colors.blue[8],
       strokeWidth: 2,
     },
+    "& .source-node:hover text": { fill: colors.blue[10] },
     "& .source-node[aria-pressed='true'] > g > rect, & .source-node[aria-pressed='true'] > g > polygon":
       { fill: colors.blue[3], stroke: colors.blue[9], strokeWidth: 2 },
+    "& .source-node[aria-pressed='true'] text": { fill: colors.blue[11] },
     "& .source-edge:hover > .edge, & .source-edge:hover > .message > line, & .source-edge:hover > .message > polyline, & .source-edge:hover > .class-relationship, & .source-edge:hover > .er-relationship":
       { stroke: colors.blue[8], strokeWidth: 1.5 },
     "& .source-edge[aria-pressed='true'] > .edge, & .source-edge[aria-pressed='true'] > .message > line, & .source-edge[aria-pressed='true'] > .message > polyline, & .source-edge[aria-pressed='true'] > .class-relationship, & .source-edge[aria-pressed='true'] > .er-relationship":

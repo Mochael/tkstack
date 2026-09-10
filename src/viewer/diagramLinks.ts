@@ -1,11 +1,7 @@
 import type { DiagramAnnotation } from "../diagramAnnotations.js";
 import { TkstackAnnotationError } from "../errors.js";
 
-export function linkDiagram(
-  svg: string,
-  links: DiagramAnnotation[],
-  focusClass: string,
-) {
+export function linkDiagram(svg: string, links: DiagramAnnotation[]) {
   const document = new DOMParser().parseFromString(svg, "image/svg+xml");
   for (const markerPart of document.querySelectorAll("marker *")) {
     if (markerPart.getAttribute("fill") === "var(--_arrow)")
@@ -38,10 +34,7 @@ export function linkDiagram(
       element.replaceWith(wrapper);
       wrapper.append(element);
       wrapper.setAttribute("data-source-index", String(index));
-      wrapper.setAttribute(
-        "class",
-        `source-target source-${link.target} ${focusClass}`,
-      );
+      wrapper.setAttribute("class", `source-target source-${link.target}`);
       wrapper.setAttribute("role", "button");
       wrapper.setAttribute("tabindex", "0");
       wrapper.setAttribute("aria-controls", "source-diff-panel");
