@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   backgroundColor,
   border,
@@ -15,6 +15,8 @@ import { viewerDocument } from "virtual:tkstack";
 import { ComarkView } from "./ComarkView.tsx";
 import { SourceDiffPanel, type SourceSelection } from "./SourceDiffPanel.js";
 import { DoneButton } from "./DoneButton.tsx";
+import { DiffButton } from "./DiffButton.tsx";
+import { TableOfContents } from "./TableOfContents.tsx";
 
 type ViewerMeta = {
   title: string;
@@ -23,8 +25,10 @@ type ViewerMeta = {
 export function ViewerApp() {
   const meta = useViewerMeta();
   const [selection, setSelection] = useState<SourceSelection>();
+  const [showDiffPanel, setShowDiffPanel] = useState(false);
   const hasSourceDiffs =
     viewerDocument.sourceDiffs.length > 0 || viewerDocument.hasReferences;
+  const diffPanelOpen = hasSourceDiffs && showDiffPanel;
   const body = useStyles(styles.body);
   const [shutDown, setShutDown] = useState(false);
   const title = meta === undefined ? document.title : meta.title;
@@ -32,14 +36,23 @@ export function ViewerApp() {
   const header = useStyles(styles.header);
   const heading = useStyles(styles.heading);
   const titleClass = useStyles(styles.title);
+  const actions = useStyles(styles.actions);
   const article = useStyles(styles.article);
-  const prose = useStyles(proseHtml("md"), styles.prose);
+  const prose = useStyles(styles.prose);
+  const content = useStyles(proseHtml("md"), styles.content);
   const closed = useStyles(styles.closed);
+  const articleRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (meta === undefined) return;
     document.title = meta.title;
   }, [meta]);
+
+  useEffect(() => {
+    const id = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+    if (id === "") return;
+    document.getElementById(id)?.scrollIntoView({ block: "start" });
+  }, []);
 
   if (shutDown) {
     return <main className={closed}>Closed.</main>;
@@ -51,30 +64,45 @@ export function ViewerApp() {
         <div className={heading}>
           <div className={titleClass}>{title}</div>
         </div>
-        <DoneButton
-          onClick={() => {
-            setShutDown(true);
-            // oxlint-disable-next-line typescript/no-floating-promises -- React click callbacks cannot await the server shutdown request.
-            void closeViewer();
-          }}
-        />
-      </header>
-      <div className={body} data-has-source-diffs={hasSourceDiffs}>
-        <article className={article}>
-          <div className={prose}>
-            <ComarkView
-              document={viewerDocument}
-              selectedAnnotation={selection?.annotation}
-              onSelectAnnotation={(line) =>
-                setSelection({
-                  annotation: line,
-                  reference: line.references[0]!,
-                })
-              }
+        <div className={actions}>
+          {hasSourceDiffs && (
+            <DiffButton
+              pressed={showDiffPanel}
+              onClick={() => setShowDiffPanel((open) => !open)}
             />
+          )}
+          <DoneButton
+            onClick={() => {
+              setShutDown(true);
+              // oxlint-disable-next-line typescript/no-floating-promises -- React click callbacks cannot await the server shutdown request.
+              void closeViewer();
+            }}
+          />
+        </div>
+      </header>
+      <div className={body} data-has-source-diffs={diffPanelOpen}>
+        <TableOfContents
+          headings={viewerDocument.headings}
+          articleRef={articleRef}
+        />
+        <article ref={articleRef} className={article}>
+          <div className={prose}>
+            <div className={content} data-tkstack-kind="page">
+              <ComarkView
+                document={viewerDocument}
+                selectedAnnotation={selection?.annotation}
+                onSelectAnnotation={(line) => {
+                  setShowDiffPanel(true);
+                  setSelection({
+                    annotation: line,
+                    reference: line.references[0]!,
+                  });
+                }}
+              />
+            </div>
           </div>
         </article>
-        {hasSourceDiffs && (
+        {diffPanelOpen && (
           <SourceDiffPanel
             items={viewerDocument.sourceDiffs}
             selection={selection}
@@ -132,15 +160,21 @@ const styles = {
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   }),
+  actions: style(flex({ direction: "row", align: "center", gap: 3 }), {
+    flexShrink: 0,
+  }),
   body: style({
     display: "grid",
     gridTemplateColumns: "var(--tkstack-columns)",
-    "--tkstack-columns": "minmax(0, 1fr)",
+    gridTemplateRows: "minmax(0, 1fr)",
+    "--tkstack-columns": "minmax(0, max-content) minmax(0, 1fr)",
     flex: "1 1 auto",
     minHeight: 0,
     minWidth: 0,
+    overflow: "hidden",
     "&[data-has-source-diffs='true']": {
-      "--tkstack-columns": "minmax(0, 1fr) minmax(0, 1fr)",
+      "--tkstack-columns":
+        "minmax(0, max-content) minmax(0, 1fr) minmax(0, 1fr)",
     },
     "@media (max-width: 900px)": {
       gridTemplateColumns: "minmax(0, 1fr)",
@@ -148,11 +182,15 @@ const styles = {
     },
   }),
   article: style(spacing.padding({ x: 12, y: 12 }), {
+    gridColumn: "2",
     flex: "1 1 auto",
     minWidth: 0,
     minHeight: 0,
     overflowY: "auto",
     backgroundColor: backgroundColor.app,
+    "@media (max-width: 900px)": {
+      gridColumn: "1",
+    },
   }),
   prose: style({
     display: "grid",
@@ -160,15 +198,14 @@ const styles = {
     width: "100%",
     maxWidth: "none",
     minWidth: 0,
-    "& > *": {
-      gridColumn: "2 / 3",
-      width: "100%",
-      maxWidth: "none",
-      minWidth: 0,
-    },
-    "& > [data-tkstack-kind='mermaid']": {
-      gridColumn: "1 / -1",
-      maxWidth: "none",
+  }),
+  content: style({
+    gridColumn: "2 / 3",
+    width: "100%",
+    maxWidth: "none",
+    minWidth: 0,
+    "& h1, & h2, & h3, & h4, & h5, & h6": {
+      scrollMarginTop: spacing.value(4),
     },
     "& ul > li[data-task]::before, & ol > li[data-task]::before": {
       content: "none",
