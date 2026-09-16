@@ -13,8 +13,8 @@ npx tkstack path/to/file.md
 Install skills from this repository:
 
 ```sh
-npx skills add tanishqkancharla/tkstack --skill code-walkthrough
-npx skills add tanishqkancharla/tkstack --skill generate-spec
+npx skills add tanishqkancharla/diffmap --skill code-walkthrough
+npx skills add tanishqkancharla/diffmap --skill generate-spec
 ```
 
 `code-walkthrough` explains landed changes. `generate-spec` writes a phased spec for work that has not happened yet, then serves `specs/<name>.md` with tkstack.
