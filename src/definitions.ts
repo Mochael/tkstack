@@ -25,7 +25,7 @@ import {
   type Symbol as TypeScriptSymbol,
 } from "typescript/unstable/sync";
 import * as errore from "errore";
-import { TkstackDefinitionError } from "./errors.js";
+import { DiffmapDefinitionError } from "./errors.js";
 
 export type SourceDefinition = {
   path: string;
@@ -52,16 +52,16 @@ export function findDefinition(workspaceRoot: string, params: URLSearchParams) {
     !Number.isSafeInteger(column) ||
     column < 0
   )
-    return new TkstackDefinitionError({ reason: "Invalid source position." });
+    return new DiffmapDefinitionError({ reason: "Invalid source position." });
 
   const fileName = path.resolve(workspaceRoot, requestedPath);
   if (!fileName.startsWith(workspaceRoot + path.sep)) {
-    return new TkstackDefinitionError({
+    return new DiffmapDefinitionError({
       reason: "Path escapes the workspace.",
     });
   }
   if (!/\.[cm]?[jt]sx?$/i.test(fileName)) {
-    return new TkstackDefinitionError({
+    return new DiffmapDefinitionError({
       reason: "Definition navigation supports TypeScript and JavaScript.",
     });
   }
@@ -72,7 +72,7 @@ export function findDefinition(workspaceRoot: string, params: URLSearchParams) {
   if (contents instanceof Error) return contents;
   const lines = contents.split(/\r?\n/);
   if (lines[line - 1] !== lineText || column >= lineText.length) {
-    return new TkstackDefinitionError({
+    return new DiffmapDefinitionError({
       reason:
         "This diff line differs from the current workspace. Its definition cannot be resolved.",
     });
@@ -106,10 +106,10 @@ export function readSourceReference(
 ) {
   const requestedPath = params.get("path");
   if (requestedPath === null || requestedPath.length === 0)
-    return new TkstackDefinitionError({ reason: "Missing file path." });
+    return new DiffmapDefinitionError({ reason: "Missing file path." });
   const fileName = path.resolve(workspaceRoot, requestedPath);
   if (!fileName.startsWith(workspaceRoot + path.sep))
-    return new TkstackDefinitionError({
+    return new DiffmapDefinitionError({
       reason: "Path escapes the workspace.",
     });
   const contents = readSource(fileName, `Could not read ${requestedPath}.`);
@@ -117,17 +117,17 @@ export function readSourceReference(
   const symbol = params.get("symbol");
   if (symbol !== null) {
     if (!/\.[cm]?[jt]sx?$/i.test(fileName))
-      return new TkstackDefinitionError({
+      return new DiffmapDefinitionError({
         reason: "Symbol references support TypeScript and JavaScript.",
       });
     return withProject(workspaceRoot, fileName, (project, sourceFile) => {
       const matches = sourceDeclarations(project, sourceFile, symbol);
       if (matches.length === 0)
-        return new TkstackDefinitionError({
+        return new DiffmapDefinitionError({
           reason: `Symbol "${symbol}" was not found in ${requestedPath}.`,
         });
       if (matches.length > 1)
-        return new TkstackDefinitionError({
+        return new DiffmapDefinitionError({
           reason: `Symbol "${symbol}" is ambiguous. Use a qualified name: ${matches.map((match) => match.name).join(", ")}.`,
         });
       const match = matches[0]!;
@@ -155,7 +155,7 @@ export function readSourceReference(
     end < start ||
     end > lineCount
   )
-    return new TkstackDefinitionError({
+    return new DiffmapDefinitionError({
       reason: `Invalid line range for ${requestedPath}.`,
     });
   return {
@@ -169,7 +169,7 @@ export function readSourceReference(
 function readSource(fileName: string, reason: string) {
   return errore.try({
     try: () => readFileSync(fileName, "utf8"),
-    catch: (cause) => new TkstackDefinitionError({ reason, cause }),
+    catch: (cause) => new DiffmapDefinitionError({ reason, cause }),
   });
 }
 
@@ -188,13 +188,13 @@ function withProject<T>(
       const project = snapshot.getDefaultProjectForFile(fileName);
       const source = project?.program.getSourceFile(fileName);
       if (project === undefined || source === undefined)
-        return new TkstackDefinitionError({
+        return new DiffmapDefinitionError({
           reason: "TypeScript could not open this source file.",
         });
       return run(project, source);
     },
     catch: (cause) =>
-      new TkstackDefinitionError({
+      new DiffmapDefinitionError({
         reason: "TypeScript could not resolve this source file.",
         cause,
       }),

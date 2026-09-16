@@ -11,7 +11,7 @@ import {
   text,
 } from "maui";
 import { style, useStyles } from "purse-styles";
-import { viewerDocument } from "virtual:tkstack";
+import { viewerDocument } from "virtual:diffmap";
 import { ComarkView } from "./ComarkView.tsx";
 import { SourceDiffPanel, type SourceSelection } from "./SourceDiffPanel.js";
 import { DoneButton } from "./DoneButton.tsx";
@@ -87,7 +87,7 @@ export function ViewerApp() {
         />
         <article ref={articleRef} className={article}>
           <div className={prose}>
-            <div className={content} data-tkstack-kind="page">
+            <div className={content} data-diffmap-kind="page">
               <ComarkView
                 document={viewerDocument}
                 selectedAnnotation={selection?.annotation}
@@ -118,10 +118,10 @@ function useViewerMeta() {
   const [meta, setMeta] = useState<ViewerMeta>();
   useEffect(() => {
     // oxlint-disable-next-line typescript/no-floating-promises -- React effects cannot await; this request owns the metadata update.
-    void fetch("/__tkstack/meta")
+    void fetch("/__diffmap/meta")
       .then((response) => response.json())
       .then((value) => {
-        // SAFETY: the tkstack CLI serves this shape from extractTitle.
+        // SAFETY: the diffmap CLI serves this shape from extractTitle.
         setMeta(value as ViewerMeta);
       });
   }, []);
@@ -129,7 +129,7 @@ function useViewerMeta() {
 }
 
 async function closeViewer() {
-  await fetch("/__tkstack/shutdown", { method: "POST" });
+  await fetch("/__diffmap/shutdown", { method: "POST" });
 }
 
 const styles = {
@@ -165,15 +165,15 @@ const styles = {
   }),
   body: style({
     display: "grid",
-    gridTemplateColumns: "var(--tkstack-columns)",
+    gridTemplateColumns: "var(--diffmap-columns)",
     gridTemplateRows: "minmax(0, 1fr)",
-    "--tkstack-columns": "minmax(0, max-content) minmax(0, 1fr)",
+    "--diffmap-columns": "minmax(0, max-content) minmax(0, 1fr)",
     flex: "1 1 auto",
     minHeight: 0,
     minWidth: 0,
     overflow: "hidden",
     "&[data-has-source-diffs='true']": {
-      "--tkstack-columns":
+      "--diffmap-columns":
         "minmax(0, max-content) minmax(0, 1fr) minmax(0, 1fr)",
     },
     "@media (max-width: 900px)": {
@@ -210,14 +210,14 @@ const styles = {
     "& ul > li[data-task]::before, & ol > li[data-task]::before": {
       content: "none",
     },
-    "& ul > li[data-task] > .tkstack-task-checkbox, & ol > li[data-task] > .tkstack-task-checkbox":
+    "& ul > li[data-task] > .diffmap-task-checkbox, & ol > li[data-task] > .diffmap-task-checkbox":
       {
         // Maui proseHtml md listPadding.
         position: "absolute",
         left: "-20px",
         top: "6px",
       },
-    "& .tkstack-task-checkbox label > span:last-child": {
+    "& .diffmap-task-checkbox label > span:last-child": {
       position: "absolute",
       width: "1px",
       height: "1px",

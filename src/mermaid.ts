@@ -1,6 +1,6 @@
 import { renderMermaidSVG } from "beautiful-mermaid";
 import * as errore from "errore";
-import { TkstackMermaidError } from "./errors.js";
+import { DiffmapMermaidError } from "./errors.js";
 
 export function mermaidSvg(input: {
   source: string;
@@ -24,6 +24,6 @@ export function mermaidSvg(input: {
         font: input.font,
         transparent: true,
       }),
-    catch: (cause) => new TkstackMermaidError({ cause }),
+    catch: (cause) => new DiffmapMermaidError({ cause }),
   });
 }

@@ -10,7 +10,7 @@ export function CallStackDiff(
   const shell = useStyles(pierreShell, styles.shell);
   const row = useStyles(styles.row);
   return (
-    <div className={shell} data-tkstack-kind="callstack">
+    <div className={shell} data-diffmap-kind="callstack">
       {props.lines.map((line, index) => {
         const sign = line.text.startsWith("+")
           ? "+"

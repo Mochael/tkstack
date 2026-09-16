@@ -2,15 +2,15 @@ import fs from "node:fs/promises";
 import type { Plugin } from "vite";
 import { parseViewerDocument } from "./parseViewer.js";
 
-export function tkstackContentPlugin(input: {
+export function diffmapContentPlugin(input: {
   filePath: string;
   title: string;
 }): Plugin {
-  const virtualId = "\0virtual:tkstack";
+  const virtualId = "\0virtual:diffmap";
   return {
-    name: "tkstack-content",
+    name: "diffmap-content",
     resolveId(id) {
-      if (id === "virtual:tkstack") return virtualId;
+      if (id === "virtual:diffmap") return virtualId;
     },
     async load(id) {
       if (id !== virtualId) return;
@@ -21,7 +21,7 @@ export function tkstackContentPlugin(input: {
     },
     transformIndexHtml(html) {
       return html.replaceAll(
-        "<title>tkstack</title>",
+        "<title>diffmap</title>",
         `<title>${escapeHtml(input.title)}</title>`,
       );
     },

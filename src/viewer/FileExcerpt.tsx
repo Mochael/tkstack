@@ -23,7 +23,7 @@ export function FileExcerpt(props: {
   const pierre = pierreFileOptions(resolvedTheme);
 
   return (
-    <div className={shell} data-file-path={props.path} data-tkstack-kind="file">
+    <div className={shell} data-file-path={props.path} data-diffmap-kind="file">
       <File
         file={{
           name: props.path,
@@ -44,18 +44,18 @@ function useFileExcerpt(input: { path: string; start: number; end: number }) {
       start: String(input.start),
       end: String(input.end),
     });
-    void fetch(`/__tkstack/file?${params.toString()}`)
+    void fetch(`/__diffmap/file?${params.toString()}`)
       .then((response) => {
         if (!response.ok) return undefined;
         return response.json();
       })
       .then((value) => {
         if (value === undefined) return;
-        // SAFETY: the tkstack CLI serves FileExcerpt JSON for this route.
+        // SAFETY: the diffmap CLI serves FileExcerpt JSON for this route.
         setExcerpt(value as FileExcerptPayload);
       })
       .catch((cause) => {
-        console.warn("tkstack file excerpt failed", cause);
+        console.warn("diffmap file excerpt failed", cause);
       });
   }, [input.path, input.start, input.end]);
   return excerpt;

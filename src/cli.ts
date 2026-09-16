@@ -2,10 +2,10 @@
 
 import { Cli, z } from "incur";
 import { resolveFromInvokeCwd } from "./invokeCwd.js";
-import { listRunningTkstacks } from "./registry.js";
+import { listRunningDiffmaps } from "./registry.js";
 import { startServer } from "./serve.js";
 
-const cli = Cli.create("tkstack", {
+const cli = Cli.create("diffmap", {
   description: "Serve a spec or code walkthrough as a local page",
   version: "0.1.3",
   args: z.object({
@@ -30,7 +30,7 @@ const cli = Cli.create("tkstack", {
     });
     if (started instanceof Error) {
       return c.error({
-        code: "TKSTACK",
+        code: "DIFFMAP",
         message: started.message,
       });
     }
@@ -39,7 +39,7 @@ const cli = Cli.create("tkstack", {
     return { url: started.url, file: started.filePath };
   },
 }).command("list", {
-  description: "List running tkstack viewers",
+  description: "List running diffmap viewers",
   output: z.object({
     instances: z.array(
       z.object({
@@ -51,10 +51,10 @@ const cli = Cli.create("tkstack", {
     ),
   }),
   async run(c) {
-    const instances = await listRunningTkstacks();
+    const instances = await listRunningDiffmaps();
     if (instances instanceof Error) {
       return c.error({
-        code: "TKSTACK",
+        code: "DIFFMAP",
         message: instances.message,
       });
     }

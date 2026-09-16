@@ -2,9 +2,9 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import * as errore from "errore";
-import { TkstackRegistryError } from "./errors.js";
+import { DiffmapRegistryError } from "./errors.js";
 
-type RunningTkstack = {
+type RunningDiffmap = {
   pid: number;
   title: string;
   url: string;
@@ -13,15 +13,15 @@ type RunningTkstack = {
 
 const registryDirectory = path.join(
   os.tmpdir(),
-  `tkstack-${os.userInfo().uid}`,
+  `diffmap-${os.userInfo().uid}`,
 );
 
-export async function registerRunningTkstack(entry: RunningTkstack) {
+export async function registerRunningDiffmap(entry: RunningDiffmap) {
   const created = await fs
     .mkdir(registryDirectory, { recursive: true, mode: 0o700 })
     .catch(
       (cause) =>
-        new TkstackRegistryError({ reason: "create directory", cause }),
+        new DiffmapRegistryError({ reason: "create directory", cause }),
     );
   if (created instanceof Error) return created;
 
@@ -29,24 +29,24 @@ export async function registerRunningTkstack(entry: RunningTkstack) {
   const written = await fs
     .writeFile(registryPath, JSON.stringify(entry), { mode: 0o600 })
     .catch(
-      (cause) => new TkstackRegistryError({ reason: "write entry", cause }),
+      (cause) => new DiffmapRegistryError({ reason: "write entry", cause }),
     );
   if (written instanceof Error) return written;
   return registryPath;
 }
 
-export async function unregisterRunningTkstack(registryPath: string) {
+export async function unregisterRunningDiffmap(registryPath: string) {
   return await fs
     .unlink(registryPath)
     .catch(
-      (cause) => new TkstackRegistryError({ reason: "remove entry", cause }),
+      (cause) => new DiffmapRegistryError({ reason: "remove entry", cause }),
     );
 }
 
-export async function listRunningTkstacks() {
+export async function listRunningDiffmaps() {
   const names = await fs.readdir(registryDirectory).catch((cause: unknown) => {
     if (isFileSystemError(cause) && cause.code === "ENOENT") return [];
-    return new TkstackRegistryError({ reason: "read directory", cause });
+    return new DiffmapRegistryError({ reason: "read directory", cause });
   });
   if (names instanceof Error) return names;
 
@@ -66,7 +66,7 @@ export async function listRunningTkstacks() {
         const reachable = await isRunning(entry);
         if (reachable) return entry;
 
-        const removed = await unregisterRunningTkstack(
+        const removed = await unregisterRunningDiffmap(
           path.join(registryDirectory, `${entry.pid}.json`),
         );
         if (removed instanceof Error) return removed;
@@ -83,34 +83,34 @@ async function readRegistryEntry(registryPath: string) {
   const source = await fs
     .readFile(registryPath, "utf8")
     .catch(
-      (cause) => new TkstackRegistryError({ reason: "read entry", cause }),
+      (cause) => new DiffmapRegistryError({ reason: "read entry", cause }),
     );
   if (source instanceof Error) return source;
   return errore.try({
-    // SAFETY: registerRunningTkstack is the only writer for registry entries.
-    try: () => JSON.parse(source) as RunningTkstack,
+    // SAFETY: registerRunningDiffmap is the only writer for registry entries.
+    try: () => JSON.parse(source) as RunningDiffmap,
     catch: (cause) =>
-      new TkstackRegistryError({ reason: "parse entry", cause }),
+      new DiffmapRegistryError({ reason: "parse entry", cause }),
   });
 }
 
-async function isRunning(entry: RunningTkstack) {
-  const response = await fetch(`${entry.url}/__tkstack/meta`, {
+async function isRunning(entry: RunningDiffmap) {
+  const response = await fetch(`${entry.url}/__diffmap/meta`, {
     signal: AbortSignal.timeout(500),
   }).catch(
-    (cause) => new TkstackRegistryError({ reason: "reach server", cause }),
+    (cause) => new DiffmapRegistryError({ reason: "reach server", cause }),
   );
   if (response instanceof Error) return false;
   if (!response.ok) return false;
 
-  // SAFETY: tkstack serves this shape from its private metadata endpoint.
+  // SAFETY: diffmap serves this shape from its private metadata endpoint.
   const meta = await (
     response.json() as Promise<{
       pid: number;
       file: string;
     }>
   ).catch(
-    (cause) => new TkstackRegistryError({ reason: "read server", cause }),
+    (cause) => new DiffmapRegistryError({ reason: "read server", cause }),
   );
   if (meta instanceof Error) return false;
   return meta.pid === entry.pid && meta.file === entry.file;

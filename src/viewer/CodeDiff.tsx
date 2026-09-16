@@ -12,7 +12,7 @@ export function CodeDiff(props: { source: string; path?: string }) {
   const disableFileHeader = props.path === undefined;
 
   return (
-    <div className={shell} data-file-path={path} data-tkstack-kind="diff">
+    <div className={shell} data-file-path={path} data-diffmap-kind="diff">
       <PatchDiff
         patch={patch}
         disableWorkerPool

@@ -2,15 +2,15 @@ import { useEffect, useState } from "react";
 import type { CodeViewDiffItem, CodeViewLineSelection } from "@pierre/diffs";
 import type { SourceReference } from "../annotations.js";
 import type { SourceDefinition, DefinitionResponse } from "../definitions.js";
-import { TkstackDefinitionError } from "../errors.js";
+import { DiffmapDefinitionError } from "../errors.js";
 
 export async function requestSource(
   endpoint: "source" | "definition",
   params: URLSearchParams,
 ) {
-  const response = await fetch(`/__tkstack/${endpoint}?${params}`).catch(
+  const response = await fetch(`/__diffmap/${endpoint}?${params}`).catch(
     (cause) =>
-      new TkstackDefinitionError({
+      new DiffmapDefinitionError({
         reason: "Could not reach the source service.",
         cause,
       }),
@@ -19,21 +19,21 @@ export async function requestSource(
   const result = await response
     .json()
     .then((value) => {
-      // SAFETY: the local tkstack source endpoints own this response shape.
+      // SAFETY: the local diffmap source endpoints own this response shape.
       return value as DefinitionResponse;
     })
     .catch(
       (cause) =>
-        new TkstackDefinitionError({
+        new DiffmapDefinitionError({
           reason: "Could not read the source response.",
           cause,
         }),
     );
   if (result instanceof Error) return result;
   if (result.error !== undefined)
-    return new TkstackDefinitionError({ reason: result.error });
+    return new DiffmapDefinitionError({ reason: result.error });
   if (result.definition === undefined)
-    return new TkstackDefinitionError({ reason: "No definition found." });
+    return new DiffmapDefinitionError({ reason: "No definition found." });
   return result.definition;
 }
 

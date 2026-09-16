@@ -1,6 +1,6 @@
 ---
 name: generate-spec
-description: Research and collaboratively design a significant feature, fix, or refactor, then write a phased implementation spec in specs/ and serve it with tkstack. Use when the user asks to plan, spec, scope, or phase work before implementation.
+description: Research and collaboratively design a significant feature, fix, or refactor, then write a phased implementation spec in specs/ and serve it with diffmap. Use when the user asks to plan, spec, scope, or phase work before implementation.
 ---
 
 # Generate an implementation spec
@@ -32,7 +32,7 @@ Create `specs/<short-kebab-case-name>.md` with the format below. Do not write sp
 After the markdown file exists, run it from the repo root:
 
 ```sh
-npx tkstack specs/<name>.md
+npx diffmap specs/<name>.md
 ```
 
 Options:
@@ -40,7 +40,7 @@ Options:
 - `--port <n>` — listen port (default `4177`)
 - `--root <dir>` — workspace root for file excerpts (default cwd)
 
-The command prints a local URL and keeps running. **Done** in the top right posts `/__tkstack/shutdown` and stops the server.
+The command prints a local URL and keeps running. **Done** in the top right posts `/__diffmap/shutdown` and stops the server.
 The server also stops after 24 hours without a page or file-excerpt request. Loading or refreshing the page resets that timer.
 
 Keep the server running and give the user the spec path and local URL. Do not open the URL in a browser unless the user explicitly asks.
@@ -134,7 +134,7 @@ Walk through the call-stack change, then show short code previews of the main ed
 - [ ] Run `<repository check command>`.
 ````
 
-Prefer `[[path/to/file.ts#symbolName]]` on a stack line when linking a current TypeScript or JavaScript declaration. Use qualified names such as `[[src/store.ts#Store.save]]` when names are ambiguous. TK Stack highlights a matching included new-side patch when possible, otherwise the current file. A symbol reference does not require an embedded patch. Use `[[path/to/file]]` or `[[path/to/file#L12-L30]]` for files and ranges in other languages. Leave proposed-only symbols unlinked until they exist, or link the file they will live in.
+Prefer `[[path/to/file.ts#symbolName]]` on a stack line when linking a current TypeScript or JavaScript declaration. Use qualified names such as `[[src/store.ts#Store.save]]` when names are ambiguous. diffmap highlights a matching included new-side patch when possible, otherwise the current file. A symbol reference does not require an embedded patch. Use `[[path/to/file]]` or `[[path/to/file#L12-L30]]` for files and ranges in other languages. Leave proposed-only symbols unlinked until they exist, or link the file they will live in.
 
 Append `[[id:old:start-end]]` or `[[id:new:start-end]]` to a stack line to link an exact source change. Use actual source line numbers from the compared versions; `[[id:new:12]]` links a single line. Keep references separate from the visible `#` explanation. Link removed steps with `old` references, including steps whose source file was deleted. Link unchanged steps when their implementation changed, and leave context-only steps unlinked. A line may reference several changes, including different files.
 
@@ -142,7 +142,7 @@ Define each referenced ID once in a `source-diff:id:path` fence anywhere in the 
 
 Mermaid diagrams can use the same references. Inside the fence, add `%% ref node:<id> [[path#symbol]]` for a node or sequence participant, or `%% ref edge:<index> [[id:new:start-end]]` for an edge or sequence message. Edge indices start at zero in declaration order. Put multiple references on one directive rather than repeating its target. These are Mermaid comments and do not appear in labels.
 
-TK Stack hides reference markers and renders source definitions in one shared panel. Clicking a stack line, linked diagram node, or linked edge scrolls to and highlights its code. For full syntax, read the [TK Stack README](https://github.com/tanishqkancharla/diffmap#link-call-stacks-to-source-changes) and [example](https://github.com/tanishqkancharla/diffmap/blob/main/fixtures/annotations.md). Mermaid node and edge links are shown in the [diagram example](https://github.com/tanishqkancharla/diffmap/blob/main/fixtures/references.md).
+diffmap hides reference markers and renders source definitions in one shared panel. Clicking a stack line, linked diagram node, or linked edge scrolls to and highlights its code. For full syntax, read the [diffmap README](https://github.com/tanishqkancharla/diffmap#link-call-stacks-to-source-changes) and [example](https://github.com/tanishqkancharla/diffmap/blob/main/fixtures/annotations.md). Mermaid node and edge links are shown in the [diagram example](https://github.com/tanishqkancharla/diffmap/blob/main/fixtures/references.md).
 
 Use `callstack` fences with tree branches (`└──` / `├──`) and unified diff signs. Call stacks render without a file header. Put a trailing `#` comment on a line when the symbol name does not explain its purpose, return value, condition, or side effect. A standalone `#` comment can explain the next step. Skip comments that merely repeat the symbol name.
 
@@ -159,7 +159,7 @@ Use `callstack` fences with tree branches (`└──` / `├──`) and unifie
 
 ## Fence reference
 
-See the [TK Stack README](https://github.com/tanishqkancharla/diffmap) for rendering details. Specs use these fences:
+See the [diffmap README](https://github.com/tanishqkancharla/diffmap) for rendering details. Specs use these fences:
 
 | Fence info string                              | Viewer                                                       |
 | ---------------------------------------------- | ------------------------------------------------------------ |
@@ -168,12 +168,12 @@ See the [TK Stack README](https://github.com/tanishqkancharla/diffmap) for rende
 | `source-diff:id:path`                          | Named Git patch in the shared source panel                   |
 | `diff:path`                                    | Proposed sketch patch with Pierre’s file header              |
 | `start:end:path`                               | Pierre file excerpt with Pierre’s file header                |
-| `html`                                         | Trusted HTML from this file. tkstack does not sanitize it.   |
+| `html`                                         | Trusted HTML from this file. diffmap does not sanitize it.   |
 
 Specs are markdown. Curly braces in prose are plain text. Use small tables for state ownership or data mappings when they clarify the call flows. Link to relevant source files in prose when useful; use call-stack and Mermaid references to show the current code the design depends on.
 
-Use an `html` fence, or write HTML in the markdown, for callouts. HTML from this file is trusted local content. tkstack does not sanitize it. Only use it for files you wrote.
+Use an `html` fence, or write HTML in the markdown, for callouts. HTML from this file is trusted local content. diffmap does not sanitize it. Only use it for files you wrote.
 
 ## Final check
 
-Before serving, confirm that the spec reflects every user decision; diagrams and call stacks cover the important paths; call-stack lines and Mermaid targets that point at existing code include `[[path#symbol]]` or `%% ref` links; each phase stays near the 200-line limit and can land alone; previews name real files and symbols; links and commands are valid; `source-diff` fences are real patches rather than invented ones; and the full plan covers every goal without pulling in a non-goal. Confirm tkstack is serving the page.
+Before serving, confirm that the spec reflects every user decision; diagrams and call stacks cover the important paths; call-stack lines and Mermaid targets that point at existing code include `[[path#symbol]]` or `%% ref` links; each phase stays near the 200-line limit and can land alone; previews name real files and symbols; links and commands are valid; `source-diff` fences are real patches rather than invented ones; and the full plan covers every goal without pulling in a non-goal. Confirm diffmap is serving the page.
