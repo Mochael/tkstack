@@ -6,7 +6,7 @@
   "author": "Tanishq Kancharla",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tanishqkancharla/tkstack.git"
+    "url": "git+https://github.com/tanishqkancharla/diffmap.git"
   },
   "bin": {
     "tkstack": "bin.js"

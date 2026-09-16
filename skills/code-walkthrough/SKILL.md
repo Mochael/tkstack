@@ -107,7 +107,7 @@ Define each referenced ID once in a `source-diff:id:path` fence anywhere in the 
 
 Mermaid diagrams can use the same references. Inside the fence, add `%% ref node:<id> [[path#symbol]]` for a node or sequence participant, or `%% ref edge:<index> [[id:new:start-end]]` for an edge or sequence message. Edge indices start at zero in declaration order. Put multiple references on one directive rather than repeating its target. These are Mermaid comments and do not appear in labels.
 
-TK Stack hides reference markers and renders source definitions in one shared panel. Clicking a stack line, linked diagram node, or linked edge scrolls to and highlights its code. For full syntax, read the [TK Stack README](https://github.com/tanishqkancharla/tkstack#link-call-stacks-to-source-changes) and [example](https://github.com/tanishqkancharla/tkstack/blob/main/fixtures/annotations.md).
+TK Stack hides reference markers and renders source definitions in one shared panel. Clicking a stack line, linked diagram node, or linked edge scrolls to and highlights its code. For full syntax, read the [TK Stack README](https://github.com/tanishqkancharla/diffmap#link-call-stacks-to-source-changes) and [example](https://github.com/tanishqkancharla/diffmap/blob/main/fixtures/annotations.md).
 
 Use `callstack` fences with tree branches (`└──` / `├──`) and unified diff signs. Call stacks render without a file header. Put a trailing `#` comment on a line when the symbol name does not explain its purpose, return value, condition, or side effect. A standalone `#` comment can explain the next step. Skip comments that merely repeat the symbol name.
 
@@ -119,7 +119,7 @@ Repeat `## <outcome>` for each slice of the change. Put Mermaid in a chapter whe
 
 ## Fence reference
 
-See the [TK Stack README](https://github.com/tanishqkancharla/tkstack) for rendering details. The walkthrough uses these fences:
+See the [TK Stack README](https://github.com/tanishqkancharla/diffmap) for rendering details. The walkthrough uses these fences:
 
 | Fence info string                              | Viewer                                                       |
 | ---------------------------------------------- | ------------------------------------------------------------ |
