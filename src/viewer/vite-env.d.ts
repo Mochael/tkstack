@@ -1,4 +1,4 @@
-declare module "virtual:tkstack" {
+declare module "virtual:diffmap" {
   import type { ViewerDocument } from "../parseViewer.js";
   export const viewerDocument: ViewerDocument;
 }

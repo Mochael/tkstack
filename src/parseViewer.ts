@@ -2,7 +2,7 @@ import * as errore from "errore";
 import { parsePatchFiles, type CodeViewDiffItem } from "@pierre/diffs";
 import { parseAST } from "md4x/napi";
 import type { ComarkElement, ComarkNode } from "md4x/napi";
-import { TkstackAnnotationError, TkstackParseError } from "./errors.js";
+import { DiffmapAnnotationError, DiffmapParseError } from "./errors.js";
 import { parseFence, type Fence } from "./parseFence.js";
 
 export type ViewerDocument = {
@@ -60,7 +60,7 @@ export type ViewerElementAttrs = {
 export function parseViewerDocument(source: string) {
   const tree = errore.try({
     try: () => parseAST(source),
-    catch: (cause) => new TkstackParseError({ cause }),
+    catch: (cause) => new DiffmapParseError({ cause }),
   });
   if (tree instanceof Error) return tree;
   const nodes = tree.nodes.flatMap(fromNode);
@@ -69,14 +69,14 @@ export function parseViewerDocument(source: string) {
   for (const fence of fences) {
     if (fence.kind !== "source-diff") continue;
     if (sourceDiffs.some((diff) => diff.id === fence.id)) {
-      return new TkstackAnnotationError({
+      return new DiffmapAnnotationError({
         reason: `Duplicate source diff ID "${fence.id}"`,
       });
     }
     const patches = errore.try({
       try: () => parsePatchFiles(fence.source, undefined, true),
       catch: (cause) =>
-        new TkstackAnnotationError({
+        new DiffmapAnnotationError({
           reason: `Invalid patch "${fence.id}"`,
           cause,
         }),
@@ -89,12 +89,12 @@ export function parseViewerDocument(source: string) {
       fileDiff === undefined ||
       fileDiff.hunks.length === 0
     ) {
-      return new TkstackAnnotationError({
+      return new DiffmapAnnotationError({
         reason: `Source diff "${fence.id}" must contain one file with unified diff hunks`,
       });
     }
     if (fileDiff.name !== fence.path) {
-      return new TkstackAnnotationError({
+      return new DiffmapAnnotationError({
         reason: `Source diff "${fence.id}" path does not match its patch (${fileDiff.name})`,
       });
     }
@@ -116,7 +116,7 @@ export function parseViewerDocument(source: string) {
         link.annotation.references.length === 0 ||
         (link.target === "edge" && !/^(0|[1-9]\d*)$/.test(link.id))
       ) {
-        return new TkstackAnnotationError({
+        return new DiffmapAnnotationError({
           reason: `Invalid or duplicate Mermaid reference for ${target}`,
         });
       }
@@ -125,7 +125,7 @@ export function parseViewerDocument(source: string) {
   }
   for (const line of annotations) {
     if (line.text.includes("[[")) {
-      return new TkstackAnnotationError({
+      return new DiffmapAnnotationError({
         reason: `Invalid reference in "${line.text}". Use [[id:old|new:start-end]] or [[path#symbol]]`,
       });
     }
@@ -137,7 +137,7 @@ export function parseViewerDocument(source: string) {
             !Number.isSafeInteger(ref.end) ||
             ref.end! < ref.start)
         ) {
-          return new TkstackAnnotationError({
+          return new DiffmapAnnotationError({
             reason: `Invalid file range in "${ref.path}"`,
           });
         }
@@ -145,7 +145,7 @@ export function parseViewerDocument(source: string) {
       }
       const diff = sourceDiffs.find((item) => item.id === ref.id);
       if (diff === undefined) {
-        return new TkstackAnnotationError({
+        return new DiffmapAnnotationError({
           reason: `Unknown source diff "${ref.id}"`,
         });
       }
@@ -162,7 +162,7 @@ export function parseViewerDocument(source: string) {
         ref.end < ref.start ||
         !inHunk
       ) {
-        return new TkstackAnnotationError({
+        return new DiffmapAnnotationError({
           reason: `Range ${ref.side}:${ref.start}-${ref.end} is not in a hunk of "${ref.id}"`,
         });
       }

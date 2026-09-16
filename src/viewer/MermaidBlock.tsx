@@ -53,7 +53,7 @@ export function MermaidBlock(
   }, [linked, props.annotations, props.selectedAnnotation]);
   if (linked instanceof Error) {
     return (
-      <div ref={container} className={shell} data-tkstack-kind="mermaid">
+      <div ref={container} className={shell} data-diffmap-kind="mermaid">
         {linked.message}
       </div>
     );
@@ -62,7 +62,7 @@ export function MermaidBlock(
     <div
       ref={container}
       className={shell}
-      data-tkstack-kind="mermaid"
+      data-diffmap-kind="mermaid"
       onClick={(event) => {
         const target = event.target;
         if (!(target instanceof Element)) return;

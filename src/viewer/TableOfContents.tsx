@@ -22,7 +22,7 @@ export function TableOfContents(props: {
     <nav
       className={navClass}
       aria-label="Table of contents"
-      data-tkstack-kind="toc"
+      data-diffmap-kind="toc"
     >
       <TocList
         items={items}
@@ -167,19 +167,19 @@ const styles = {
     "@media (max-width: 1100px)": {
       display: "none",
     },
-    "&[data-tkstack-kind='toc'] ol": {
+    "&[data-diffmap-kind='toc'] ol": {
       listStyle: "none",
       counterReset: "none",
       margin: 0,
       padding: 0,
     },
-    "&[data-tkstack-kind='toc'] ol ol": {
+    "&[data-diffmap-kind='toc'] ol ol": {
       paddingInlineStart: spacing.value(6),
     },
-    "&[data-tkstack-kind='toc'] ol > li::before": {
+    "&[data-diffmap-kind='toc'] ol > li::before": {
       content: "none",
     },
-    "&[data-tkstack-kind='toc'] a": {
+    "&[data-diffmap-kind='toc'] a": {
       fontWeight: 400,
       textDecoration: "none",
     },

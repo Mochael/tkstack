@@ -1,6 +1,6 @@
-# tkstack fixture
+# diffmap fixture
 
-tkstack parses markdown with md4x and serves a Maui page. Curly braces in prose are plain text, so a path like `{workspace}/.halo/extensions/<id>/` does not need escaping. Put angle brackets in inline code: `{workspace}/extensions/<id>/`.
+diffmap parses markdown with md4x and serves a Maui page. Curly braces in prose are plain text, so a path like `{workspace}/.halo/extensions/<id>/` does not need escaping. Put angle brackets in inline code: `{workspace}/extensions/<id>/`.
 
 [cli.ts](../src/cli.ts) starts the local server. **Done** in the top right stops it.
 
@@ -42,7 +42,7 @@ Raw HTML in the file is trusted local content:
 
 <aside>
   <strong>Raw HTML.</strong> md4x keeps this as an <code>html</code> node.
-  tkstack does not sanitize it.
+  diffmap does not sanitize it.
 </aside>
 
 ## Code
@@ -73,7 +73,7 @@ A `callstack` fence is a Pierre patch with no file header.
  startServer
 -└── writeStaticHtml
 +└── createViteServer
-    └── handleTkstackRequest
+    └── handleDiffmapRequest
 ```
 
 A `diff` fence that contains `└──` / `├──` is also a call stack, still with no header.
@@ -102,7 +102,7 @@ A complete `--- a/` / `+++ b/` patch keeps Pierre’s file header.
 Tag the path on the info string instead: `diff:src/cli.ts`.
 
 ```diff:src/cli.ts
- Cli.create("tkstack", {
+ Cli.create("diffmap", {
 -  description: "Serve a walkthrough",
 +  description: "Serve a spec or code walkthrough as a local page",
 ```
@@ -118,7 +118,7 @@ No `--- a/` path and no `diff:path` info string: Pierre patch, no file header.
 
 ## HTML fence
 
-An `html` fence is trusted local content. tkstack does not sanitize it.
+An `html` fence is trusted local content. diffmap does not sanitize it.
 
 ```html
 <aside>

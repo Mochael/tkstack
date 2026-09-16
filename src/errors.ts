@@ -1,36 +1,36 @@
 import * as errore from "errore";
 
-export class TkstackServeError extends errore.createTaggedError({
-  name: "TkstackServeError",
-  message: "tkstack server failed: $reason",
+export class DiffmapServeError extends errore.createTaggedError({
+  name: "DiffmapServeError",
+  message: "diffmap server failed: $reason",
 }) {}
 
-export class TkstackFileError extends errore.createTaggedError({
-  name: "TkstackFileError",
-  message: "tkstack could not read $path: $reason",
+export class DiffmapFileError extends errore.createTaggedError({
+  name: "DiffmapFileError",
+  message: "diffmap could not read $path: $reason",
 }) {}
 
-export class TkstackRegistryError extends errore.createTaggedError({
-  name: "TkstackRegistryError",
-  message: "tkstack registry failed: $reason",
+export class DiffmapRegistryError extends errore.createTaggedError({
+  name: "DiffmapRegistryError",
+  message: "diffmap registry failed: $reason",
 }) {}
 
-export class TkstackMermaidError extends errore.createTaggedError({
-  name: "TkstackMermaidError",
-  message: "tkstack could not render mermaid",
+export class DiffmapMermaidError extends errore.createTaggedError({
+  name: "DiffmapMermaidError",
+  message: "diffmap could not render mermaid",
 }) {}
 
-export class TkstackParseError extends errore.createTaggedError({
-  name: "TkstackParseError",
-  message: "tkstack could not parse markdown",
+export class DiffmapParseError extends errore.createTaggedError({
+  name: "DiffmapParseError",
+  message: "diffmap could not parse markdown",
 }) {}
 
-export class TkstackAnnotationError extends errore.createTaggedError({
-  name: "TkstackAnnotationError",
-  message: "tkstack source annotation: $reason",
+export class DiffmapAnnotationError extends errore.createTaggedError({
+  name: "DiffmapAnnotationError",
+  message: "diffmap source annotation: $reason",
 }) {}
 
-export class TkstackDefinitionError extends errore.createTaggedError({
-  name: "TkstackDefinitionError",
+export class DiffmapDefinitionError extends errore.createTaggedError({
+  name: "DiffmapDefinitionError",
   message: "$reason",
 }) {}

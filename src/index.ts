@@ -17,4 +17,4 @@ export type {
   ViewerView,
 } from "./parseViewer.js";
 export { startServer } from "./serve.js";
-export type { FileExcerpt, StartServerInput, TkstackServer } from "./serve.js";
+export type { FileExcerpt, StartServerInput, DiffmapServer } from "./serve.js";

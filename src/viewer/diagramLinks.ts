@@ -1,5 +1,5 @@
 import type { DiagramAnnotation } from "../diagramAnnotations.js";
-import { TkstackAnnotationError } from "../errors.js";
+import { DiffmapAnnotationError } from "../errors.js";
 
 export function linkDiagram(svg: string, links: DiagramAnnotation[]) {
   const document = new DOMParser().parseFromString(svg, "image/svg+xml");
@@ -23,7 +23,7 @@ export function linkDiagram(svg: string, links: DiagramAnnotation[]) {
           )
         : edges.slice(Number(link.id), Number(link.id) + 1);
     if (elements.length === 0)
-      return new TkstackAnnotationError({
+      return new DiffmapAnnotationError({
         reason: `Mermaid ${link.target}:${link.id} does not exist in this diagram.`,
       });
     for (const element of elements) {

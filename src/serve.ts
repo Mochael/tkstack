@@ -2,16 +2,16 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer, type ViteDevServer } from "vite";
-import { tkstackContentPlugin } from "./contentPlugin.js";
-import { TkstackFileError, TkstackServeError } from "./errors.js";
+import { diffmapContentPlugin } from "./contentPlugin.js";
+import { DiffmapFileError, DiffmapServeError } from "./errors.js";
 import { extractTitle } from "./extractDocument.js";
 import { findDefinition, readSourceReference } from "./definitions.js";
 import {
-  registerRunningTkstack,
-  unregisterRunningTkstack,
+  registerRunningDiffmap,
+  unregisterRunningDiffmap,
 } from "./registry.js";
 
-export type TkstackServer = {
+export type DiffmapServer = {
   url: string;
   filePath: string;
   shutdown: () => Promise<void>;
@@ -46,7 +46,7 @@ export async function startServer(input: StartServerInput) {
   const workspaceRoot = path.resolve(input.workspaceRoot);
   const source = await fs.readFile(filePath, "utf8").catch(
     (cause) =>
-      new TkstackFileError({
+      new DiffmapFileError({
         path: filePath,
         reason: "read",
         cause,
@@ -68,7 +68,7 @@ export async function startServer(input: StartServerInput) {
     clearTimeout(inactivityTimer);
     if (vite !== undefined) await vite.close();
     if (registryPath !== undefined) {
-      const removed = await unregisterRunningTkstack(registryPath);
+      const removed = await unregisterRunningDiffmap(registryPath);
       if (removed instanceof Error) console.error(removed.message);
     }
     closedBarrier.resolve();
@@ -86,9 +86,9 @@ export async function startServer(input: StartServerInput) {
       },
     },
     plugins: [
-      tkstackContentPlugin({ filePath, title }),
+      diffmapContentPlugin({ filePath, title }),
       {
-        name: "tkstack-api",
+        name: "diffmap-api",
         configureServer(server) {
           server.middlewares.use((req, res, next) => {
             const url = req.url;
@@ -99,9 +99,9 @@ export async function startServer(input: StartServerInput) {
             if (
               req.method === "GET" &&
               (pathname === "/" ||
-                pathname === "/__tkstack/file" ||
-                pathname === "/__tkstack/definition" ||
-                pathname === "/__tkstack/source")
+                pathname === "/__diffmap/file" ||
+                pathname === "/__diffmap/definition" ||
+                pathname === "/__diffmap/source")
             ) {
               inactivityTimer?.refresh();
             }
@@ -114,12 +114,12 @@ export async function startServer(input: StartServerInput) {
               void serveMarkdown({ filePath, res });
               return;
             }
-            if (url === undefined || !url.startsWith("/__tkstack")) {
+            if (url === undefined || !url.startsWith("/__diffmap")) {
               next();
               return;
             }
             // oxlint-disable-next-line typescript/no-floating-promises -- Connect middleware callbacks cannot await response handling.
-            void handleTkstackRequest({
+            void handleDiffmapRequest({
               url,
               method: req.method === undefined ? "GET" : req.method,
               workspaceRoot,
@@ -138,10 +138,10 @@ export async function startServer(input: StartServerInput) {
   const localUrl = vite.resolvedUrls?.local[0];
   if (localUrl === undefined) {
     await shutdown();
-    return new TkstackServeError({ reason: "no listen url" });
+    return new DiffmapServeError({ reason: "no listen url" });
   }
   const url = localUrl.replace(/\/$/, "");
-  const registered = await registerRunningTkstack({
+  const registered = await registerRunningDiffmap({
     pid: process.pid,
     title,
     url,
@@ -177,7 +177,7 @@ export async function startServer(input: StartServerInput) {
   };
 }
 
-type TkstackResponse = {
+type DiffmapResponse = {
   statusCode: number;
   setHeader: (name: string, value: string) => void;
   end: (chunk: string) => void;
@@ -195,11 +195,11 @@ function acceptsMarkdown(accept: string | undefined) {
 
 async function serveMarkdown(input: {
   filePath: string;
-  res: TkstackResponse;
+  res: DiffmapResponse;
 }) {
   const source = await fs.readFile(input.filePath, "utf8").catch(
     (cause) =>
-      new TkstackFileError({
+      new DiffmapFileError({
         path: input.filePath,
         reason: "read",
         cause,
@@ -217,23 +217,23 @@ async function serveMarkdown(input: {
   input.res.end(source);
 }
 
-async function handleTkstackRequest(input: {
+async function handleDiffmapRequest(input: {
   url: string;
   method: string;
   workspaceRoot: string;
   title: string;
   filePath: string;
   shutdown: () => Promise<void>;
-  res: TkstackResponse;
+  res: DiffmapResponse;
 }) {
   const parsed = new URL(input.url, "http://127.0.0.1");
   if (
-    (parsed.pathname === "/__tkstack/definition" ||
-      parsed.pathname === "/__tkstack/source") &&
+    (parsed.pathname === "/__diffmap/definition" ||
+      parsed.pathname === "/__diffmap/source") &&
     input.method === "GET"
   ) {
     const definition =
-      parsed.pathname === "/__tkstack/source"
+      parsed.pathname === "/__diffmap/source"
         ? readSourceReference(input.workspaceRoot, parsed.searchParams)
         : findDefinition(input.workspaceRoot, parsed.searchParams);
     input.res.statusCode = definition instanceof Error ? 400 : 200;
@@ -247,7 +247,7 @@ async function handleTkstackRequest(input: {
     );
     return;
   }
-  if (parsed.pathname === "/__tkstack/shutdown" && input.method === "POST") {
+  if (parsed.pathname === "/__diffmap/shutdown" && input.method === "POST") {
     input.res.statusCode = 200;
     input.res.setHeader("content-type", "text/plain; charset=utf-8");
     input.res.end("ok");
@@ -257,7 +257,7 @@ async function handleTkstackRequest(input: {
     }, 250);
     return;
   }
-  if (parsed.pathname === "/__tkstack/meta" && input.method === "GET") {
+  if (parsed.pathname === "/__diffmap/meta" && input.method === "GET") {
     input.res.statusCode = 200;
     input.res.setHeader("content-type", "application/json; charset=utf-8");
     input.res.end(
@@ -269,7 +269,7 @@ async function handleTkstackRequest(input: {
     );
     return;
   }
-  if (parsed.pathname === "/__tkstack/file" && input.method === "GET") {
+  if (parsed.pathname === "/__diffmap/file" && input.method === "GET") {
     const excerpt = await readWorkspaceExcerpt({
       workspaceRoot: input.workspaceRoot,
       requestedPath: parsed.searchParams.get("path"),
@@ -305,7 +305,7 @@ async function readWorkspaceExcerpt(input: {
   end: string | null;
 }) {
   if (input.requestedPath === null || input.requestedPath.length === 0) {
-    return new TkstackFileError({
+    return new DiffmapFileError({
       path: "",
       reason: "missing path",
     });
@@ -317,14 +317,14 @@ async function readWorkspaceExcerpt(input: {
     ? resolvedRoot
     : resolvedRoot + path.sep;
   if (resolved !== resolvedRoot && !resolved.startsWith(prefix)) {
-    return new TkstackFileError({
+    return new DiffmapFileError({
       path: requestedPath,
       reason: "path escapes workspace",
     });
   }
   const contents = await fs.readFile(resolved, "utf8").catch(
     (cause) =>
-      new TkstackFileError({
+      new DiffmapFileError({
         path: requestedPath,
         reason: "read",
         cause,

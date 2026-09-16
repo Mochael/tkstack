@@ -1,11 +1,11 @@
-# tkstack
+# diffmap
 
 <img width="2031" height="1212" alt="Screenshot 2026-09-10 at 10 41 03 AM" src="https://github.com/user-attachments/assets/8650f8be-44ca-4c21-b9bf-4ce938b4083e" />
 
-tkstack is a set of personal skills as well as a web-viewer for Markdown files. It has a unique form of showing diffs using a mixture of callstack diffs and mermaid diagram links, which I've found to be personally extremely helpful in understanding massive diffs.
+diffmap is a set of personal skills as well as a web-viewer for Markdown files. It has a unique form of showing diffs using a mixture of callstack diffs and mermaid diagram links, which I've found to be personally extremely helpful in understanding massive diffs.
 
 ```sh
-npx tkstack path/to/file.md
+npx diffmap path/to/file.md
 ```
 
 ## Agent skills
@@ -17,7 +17,7 @@ npx skills add tanishqkancharla/diffmap --skill code-walkthrough
 npx skills add tanishqkancharla/diffmap --skill generate-spec
 ```
 
-`code-walkthrough` explains landed changes. `generate-spec` writes a phased spec for work that has not happened yet, then serves `specs/<name>.md` with tkstack.
+`code-walkthrough` explains landed changes. `generate-spec` writes a phased spec for work that has not happened yet, then serves `specs/<name>.md` with diffmap.
 
 Options:
 
@@ -33,7 +33,7 @@ Vite connections do not keep it alive.
 List every running viewer, including viewers using custom ports:
 
 ```sh
-npx tkstack list
+npx diffmap list
 ```
 
 Request the page with `Accept: text/markdown` to read the current source file
@@ -46,7 +46,7 @@ curl -H 'Accept: text/markdown' http://127.0.0.1:4177/
 ## Library
 
 ```ts
-import { startServer, parseFence, parseViewerDocument } from "tkstack";
+import { startServer, parseFence, parseViewerDocument } from "diffmap";
 ```
 
 `parseViewerDocument` turns markdown into the page document with [md4x](https://github.com/unjs/md4x). `startServer` listens. The generate-spec and code-walkthrough skills own spec vs walkthrough section order; the viewer does not.
@@ -60,7 +60,7 @@ import { startServer, parseFence, parseViewerDocument } from "tkstack";
 | `diff` or `diff:path` with a file path         | Pierre patch with Pierre’s file header                                                            |
 | `diff` with no path                            | Pierre patch, no file header                                                                      |
 | `start:end:path`                               | Pierre file excerpt with Pierre’s file header                                                     |
-| `html`                                         | Trusted HTML from this file. tkstack does not sanitize it. Only use it for local files you wrote. |
+| `html`                                         | Trusted HTML from this file. diffmap does not sanitize it. Only use it for local files you wrote. |
 | other langs                                    | Maui `CodeBlock`                                                                                  |
 
 Fences keep whitespace. Use them for mermaid, call stacks, and diffs.
@@ -168,7 +168,7 @@ Resolution uses the workspace's TypeScript configuration and current files.
 Deleted files and lines that no longer match the workspace show a message;
 their call stack references still highlight the embedded old-side diff.
 
-Run `npx tkstack fixtures/annotations.md` for an example
+Run `npx diffmap fixtures/annotations.md` for an example
 with old/new references, multiple files, and unchanged context.
 
 ## Link Mermaid nodes and edges

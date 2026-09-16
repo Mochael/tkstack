@@ -1,6 +1,6 @@
 ---
 name: code-walkthrough
-description: Explain implemented changes through annotated call stack diffs and prose, store the markdown in a temp directory, and serve it with tkstack.
+description: Explain implemented changes through annotated call stack diffs and prose, store the markdown in a temp directory, and serve it with diffmap.
 ---
 
 # Walk through landed code
@@ -99,7 +99,7 @@ The handler now validates before it stores. If validation returns a tagged error
 Summarize checks actually run and their results. State material gaps or failures. Do not imply that a source-checked call flow was exercised at runtime.
 ````
 
-Prefer `[[path/to/file.ts#symbolName]]` on a stack line when linking a current TypeScript or JavaScript declaration. Use qualified names such as `[[src/store.ts#Store.save]]` when names are ambiguous. TK Stack highlights a matching included new-side patch when possible, otherwise the current file. A symbol reference does not require an embedded patch. Use `[[path/to/file]]` or `[[path/to/file#L12-L30]]` for files and ranges in other languages.
+Prefer `[[path/to/file.ts#symbolName]]` on a stack line when linking a current TypeScript or JavaScript declaration. Use qualified names such as `[[src/store.ts#Store.save]]` when names are ambiguous. diffmap highlights a matching included new-side patch when possible, otherwise the current file. A symbol reference does not require an embedded patch. Use `[[path/to/file]]` or `[[path/to/file#L12-L30]]` for files and ranges in other languages.
 
 Append `[[id:old:start-end]]` or `[[id:new:start-end]]` to a stack line to link an exact source change. Use actual source line numbers from the compared versions; `[[id:new:12]]` links a single line. Keep references separate from the visible `#` explanation. Link removed steps with `old` references, including steps whose source file was deleted. Link unchanged steps when their implementation changed, and leave context-only steps unlinked. A line may reference several changes, including different files.
 
@@ -107,35 +107,35 @@ Define each referenced ID once in a `source-diff:id:path` fence anywhere in the 
 
 Mermaid diagrams can use the same references. Inside the fence, add `%% ref node:<id> [[path#symbol]]` for a node or sequence participant, or `%% ref edge:<index> [[id:new:start-end]]` for an edge or sequence message. Edge indices start at zero in declaration order. Put multiple references on one directive rather than repeating its target. These are Mermaid comments and do not appear in labels.
 
-TK Stack hides reference markers and renders source definitions in one shared panel. Clicking a stack line, linked diagram node, or linked edge scrolls to and highlights its code. For full syntax, read the [TK Stack README](https://github.com/tanishqkancharla/diffmap#link-call-stacks-to-source-changes) and [example](https://github.com/tanishqkancharla/diffmap/blob/main/fixtures/annotations.md).
+diffmap hides reference markers and renders source definitions in one shared panel. Clicking a stack line, linked diagram node, or linked edge scrolls to and highlights its code. For full syntax, read the [diffmap README](https://github.com/tanishqkancharla/diffmap#link-call-stacks-to-source-changes) and [example](https://github.com/tanishqkancharla/diffmap/blob/main/fixtures/annotations.md).
 
 Use `callstack` fences with tree branches (`└──` / `├──`) and unified diff signs. Call stacks render without a file header. Put a trailing `#` comment on a line when the symbol name does not explain its purpose, return value, condition, or side effect. A standalone `#` comment can explain the next step. Skip comments that merely repeat the symbol name.
 
 Show ownership and meaningful ordering accurately. Sibling calls stay siblings; do not nest a later call beneath an earlier one unless it actually calls it. Mark asynchronous handoffs and conditional alternatives instead of implying a single synchronous stack. Plain-language steps such as a database write are useful when clearly labeled as behavior rather than invented function names.
 
-Use an `html` fence, or write HTML in the markdown, for callouts. HTML from this file is trusted local content. tkstack does not sanitize it. Only use it for files you wrote.
+Use an `html` fence, or write HTML in the markdown, for callouts. HTML from this file is trusted local content. diffmap does not sanitize it. Only use it for files you wrote.
 
 Repeat `## <outcome>` for each slice of the change. Put Mermaid in a chapter when a local flow is clearer than the Problem, Solution, or User flows diagrams. Keep each chapter on one outcome. Skip a Mermaid fence in Problem or Solution when prose is enough.
 
 ## Fence reference
 
-See the [TK Stack README](https://github.com/tanishqkancharla/diffmap) for rendering details. The walkthrough uses these fences:
+See the [diffmap README](https://github.com/tanishqkancharla/diffmap) for rendering details. The walkthrough uses these fences:
 
 | Fence info string                              | Viewer                                                       |
 | ---------------------------------------------- | ------------------------------------------------------------ |
 | `mermaid`                                      | Beautiful Mermaid ([Craft](https://agents.craft.do/mermaid)) |
 | `callstack` or `diff` containing `└──` / `├──` | Interactive stack rows, no file header                       |
 | `source-diff:id:path`                          | Named Git patch in the shared source panel                   |
-| `html`                                         | Trusted HTML from this file. tkstack does not sanitize it.   |
+| `html`                                         | Trusted HTML from this file. diffmap does not sanitize it.   |
 
 Walkthroughs are markdown. Curly braces in prose are plain text. Use small tables for state ownership or data mappings when they clarify the call flows. Link to relevant source files in prose when useful; use source-diff annotations to show the changes.
 
 ## Serve it
 
-This skill’s CLI is tkstack. After the markdown file exists, run it from the repo root:
+This skill’s CLI is diffmap. After the markdown file exists, run it from the repo root:
 
 ```sh
-npx tkstack tmp/code-walkthrough-<name>/walkthrough.md
+npx diffmap tmp/code-walkthrough-<name>/walkthrough.md
 ```
 
 Options:
@@ -143,7 +143,7 @@ Options:
 - `--port <n>` — listen port (default `4177`)
 - `--root <dir>` — workspace root for file excerpts (default cwd)
 
-The command prints a local URL and keeps running. **Done** in the top right posts `/__tkstack/shutdown` and stops the server.
+The command prints a local URL and keeps running. **Done** in the top right posts `/__diffmap/shutdown` and stops the server.
 The server also stops after 24 hours without a page or file-excerpt request. Loading or refreshing the page resets that timer.
 
 Tell the user the markdown path and the URL. Do not open the URL in a browser unless the user explicitly asks.
@@ -160,4 +160,4 @@ Tell the user the markdown path and the URL. Do not open the URL in a browser un
 
 ## Final check
 
-Confirm that the markdown lives under `tmp/`; the comparison range and commit status are explicit; Problem and Solution match the implemented change; User flows covers each main user path; runtime chapters center on accurate, annotated call-stack diffs and prose; source-diff annotations point to real patches and valid old/new ranges; standalone source-code blocks are absent unless requested; source links are real; verification claims match checks actually run; tkstack is serving the page; and the walkthrough explains existing work without turning into a plan.
+Confirm that the markdown lives under `tmp/`; the comparison range and commit status are explicit; Problem and Solution match the implemented change; User flows covers each main user path; runtime chapters center on accurate, annotated call-stack diffs and prose; source-diff annotations point to real patches and valid old/new ranges; standalone source-code blocks are absent unless requested; source links are real; verification claims match checks actually run; diffmap is serving the page; and the walkthrough explains existing work without turning into a plan.

@@ -1,5 +1,5 @@
 {
-  "name": "tkstack",
+  "name": "diffmap",
   "version": "0.1.3",
   "description": "Serve a spec or code walkthrough as a local page",
   "license": "MIT",
@@ -9,7 +9,7 @@
     "url": "git+https://github.com/tanishqkancharla/diffmap.git"
   },
   "bin": {
-    "tkstack": "bin.js"
+    "diffmap": "bin.js"
   },
   "files": [
     "bin.js",

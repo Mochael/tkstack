@@ -154,7 +154,7 @@ function TaskListItem(props: { node: ViewerElement; children: ReactNode }) {
       className={props.node.attrs.className}
       data-task=""
     >
-      <span className="tkstack-task-checkbox">
+      <span className="diffmap-task-checkbox">
         <Checkbox
           label={nodeText(props.node)}
           checked={checked}

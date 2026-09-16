@@ -5,7 +5,7 @@ const titlePattern = /^#\s+(.+)$/m;
 
 export function extractTitle(source: string) {
   const match = titlePattern.exec(source);
-  if (match?.[1] === undefined) return "tkstack";
+  if (match?.[1] === undefined) return "diffmap";
   return match[1];
 }
 

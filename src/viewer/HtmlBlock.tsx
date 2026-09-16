@@ -6,7 +6,7 @@ export function HtmlBlock(props: { source: string }) {
   return (
     <div
       className={className}
-      data-tkstack-kind="html"
+      data-diffmap-kind="html"
       dangerouslySetInnerHTML={{ __html: props.source }}
     />
   );
