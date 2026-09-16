@@ -54,7 +54,11 @@ curl -H 'Accept: text/markdown' http://127.0.0.1:4177/
 ## Library
 
 ```ts
-import { startServer, parseFence, parseViewerDocument } from "@tanishqkancharla/diffmap";
+import {
+  startServer,
+  parseFence,
+  parseViewerDocument,
+} from "@tanishqkancharla/diffmap";
 ```
 
 `parseViewerDocument` turns markdown into the page document with [md4x](https://github.com/unjs/md4x). `startServer` listens. The generate-spec and code-walkthrough skills own spec vs walkthrough section order; the viewer does not.
