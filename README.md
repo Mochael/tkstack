@@ -5,13 +5,13 @@
 diffmap is a set of personal skills as well as a web-viewer for Markdown files. It has a unique form of showing diffs using a mixture of callstack diffs and mermaid diagram links, which I've found to be personally extremely helpful in understanding massive diffs.
 
 ```sh
-npx diffmap path/to/file.md
+npx @tanishqkancharla/diffmap path/to/file.md
 ```
 
 Share a secret gist and print a `diffmap.dev` link (requires [`gh`](https://cli.github.com/) logged in). Does not start a local server:
 
 ```sh
-npx diffmap share path/to.md
+npx @tanishqkancharla/diffmap share path/to.md
 ```
 
 Hosted viewer: `https://diffmap.dev/g/<gistId>` (optional `/<file.md>`; `#heading` is the table of contents). The page fetches the gist in the browser from `api.github.com`. Gists are unlisted, not private.
@@ -41,7 +41,7 @@ Vite connections do not keep it alive.
 List every running viewer, including viewers using custom ports:
 
 ```sh
-npx diffmap list
+npx @tanishqkancharla/diffmap list
 ```
 
 Request the page with `Accept: text/markdown` to read the current source file
@@ -54,7 +54,11 @@ curl -H 'Accept: text/markdown' http://127.0.0.1:4177/
 ## Library
 
 ```ts
-import { startServer, parseFence, parseViewerDocument } from "diffmap";
+import {
+  startServer,
+  parseFence,
+  parseViewerDocument,
+} from "@tanishqkancharla/diffmap";
 ```
 
 `parseViewerDocument` turns markdown into the page document with [md4x](https://github.com/unjs/md4x). `startServer` listens. The generate-spec and code-walkthrough skills own spec vs walkthrough section order; the viewer does not.
@@ -176,7 +180,7 @@ Resolution uses the workspace's TypeScript configuration and current files.
 Deleted files and lines that no longer match the workspace show a message;
 their call stack references still highlight the embedded old-side diff.
 
-Run `npx diffmap fixtures/annotations.md` for an example
+Run `npx @tanishqkancharla/diffmap fixtures/annotations.md` for an example
 with old/new references, multiple files, and unchanged context.
 
 ## Link Mermaid nodes and edges

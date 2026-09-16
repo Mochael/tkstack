@@ -32,7 +32,7 @@ Create `specs/<short-kebab-case-name>.md` with the format below. Do not write sp
 After the markdown file exists, run it from the repo root:
 
 ```sh
-npx diffmap specs/<name>.md
+npx @tanishqkancharla/diffmap specs/<name>.md
 ```
 
 Options:

@@ -135,7 +135,7 @@ Walkthroughs are markdown. Curly braces in prose are plain text. Use small table
 This skill’s CLI is diffmap. After the markdown file exists, run it from the repo root:
 
 ```sh
-npx diffmap tmp/code-walkthrough-<name>/walkthrough.md
+npx @tanishqkancharla/diffmap tmp/code-walkthrough-<name>/walkthrough.md
 ```
 
 Options:

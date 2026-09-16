@@ -78,7 +78,9 @@ export function GistLanding() {
         ):
       </P>
       <P>
-        <code className={code}>npx diffmap share path/to.md</code>
+        <code className={code}>
+          npx @tanishqkancharla/diffmap share path/to.md
+        </code>
       </P>
       <P>
         Secret gists are unlisted, not private. Anyone with the id can read
