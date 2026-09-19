@@ -3,8 +3,11 @@ import {
   backgroundColor,
   border,
   colors,
+  Drawer,
   flex,
   flexItem,
+  H1,
+  P,
   proseHtml,
   proseMaxWidth,
   spacing,
@@ -14,9 +17,15 @@ import { style, useStyles } from "purse-styles";
 import type { ViewerDocument } from "../parseViewer.js";
 import { ComarkView } from "./ComarkView.tsx";
 import { SourceDiffPanel, type SourceSelection } from "./SourceDiffPanel.js";
-import { DoneButton } from "./DoneButton.tsx";
+import { CloseServerButton } from "./CloseServerButton.tsx";
 import { DiffButton } from "./DiffButton.tsx";
-import { TableOfContents } from "./TableOfContents.tsx";
+import { TocButton } from "./TocButton.tsx";
+import {
+  hasTableOfContents,
+  TableOfContents,
+  TOC_SIDEBAR_MIN_WIDTH_PX,
+} from "./TableOfContents.tsx";
+import { useMediaQuery } from "./useMediaQuery.ts";
 import { ViewerModeContext, type ViewerMode } from "./viewerMode.ts";
 
 type ViewerMeta = {
@@ -55,11 +64,26 @@ export function ViewerApp(props: {
   const prose = useStyles(styles.prose);
   const content = useStyles(proseHtml("md"), styles.content);
   const closed = useStyles(styles.closed);
+  const closedCopy = useStyles(styles.closedCopy);
+  const stage = useStyles(styles.stage);
   const articleRef = useRef<HTMLElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const dwellTimer = useRef<number>(undefined);
+  const hasToc = hasTableOfContents(viewerDocument.headings);
+  const sidebarFits = useMediaQuery(
+    `(min-width: ${String(TOC_SIDEBAR_MIN_WIDTH_PX)}px)`,
+  );
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [floating, setFloating] = useState<"click" | "dwell">();
+  const tocExpanded = sidebarFits ? sidebarOpen : floating !== undefined;
 
   useEffect(() => {
     document.title = title;
   }, [title]);
+
+  useEffect(() => {
+    return () => window.clearTimeout(dwellTimer.current);
+  }, []);
 
   useEffect(() => {
     const id = decodeURIComponent(window.location.hash.replace(/^#/, ""));
@@ -67,8 +91,96 @@ export function ViewerApp(props: {
     document.getElementById(id)?.scrollIntoView({ block: "start" });
   }, []);
 
+  useEffect(() => {
+    if (floating === undefined) return;
+    const close = () => setFloating(undefined);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    window.addEventListener("keydown", onKey);
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const onPanel =
+        target.closest("#diffmap-toc") !== null ||
+        target.closest("[data-side='start']") !== null;
+      if (floating === "dwell") {
+        if (onPanel) setFloating("click");
+        return;
+      }
+      if (onPanel || target.closest("#diffmap-toc-button") !== null) {
+        return;
+      }
+      close();
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [floating]);
+
+  useEffect(() => {
+    if (!hasToc || sidebarFits) {
+      window.clearTimeout(dwellTimer.current);
+      dwellTimer.current = undefined;
+      return;
+    }
+    const onMove = (event: MouseEvent) => {
+      const stageEl = stageRef.current;
+      if (stageEl === null) return;
+      const bounds = stageEl.getBoundingClientRect();
+      const x = event.clientX - bounds.left;
+      const inStage =
+        event.clientX >= bounds.left &&
+        event.clientX <= bounds.right &&
+        event.clientY >= bounds.top &&
+        event.clientY <= bounds.bottom;
+      if (floating === "dwell") {
+        const panelRight =
+          document.querySelector("[data-side='start']")?.getBoundingClientRect()
+            .right ??
+          document.getElementById("diffmap-toc")?.getBoundingClientRect().right;
+        if (
+          panelRight !== undefined &&
+          event.clientX > panelRight + DWELL_LEAVE_PAD_PX
+        ) {
+          setFloating(undefined);
+        }
+        return;
+      }
+      if (floating !== undefined) return;
+      if (inStage && x <= TOC_DWELL_EDGE_PX) {
+        if (dwellTimer.current !== undefined) return;
+        dwellTimer.current = window.setTimeout(() => {
+          dwellTimer.current = undefined;
+          setFloating("dwell");
+        }, DWELL_MS);
+        return;
+      }
+      if (x <= TOC_DWELL_CANCEL_PX && inStage) return;
+      window.clearTimeout(dwellTimer.current);
+      dwellTimer.current = undefined;
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("mousemove", onMove);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("mousemove", onMove);
+      window.clearTimeout(dwellTimer.current);
+      dwellTimer.current = undefined;
+    };
+  }, [floating, hasToc, sidebarFits]);
+
   if (shutDown) {
-    return <main className={closed}>Closed.</main>;
+    return (
+      <main className={closed}>
+        <div className={closedCopy}>
+          <H1>Closed spec</H1>
+          <P>The local server stopped.</P>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -76,6 +188,24 @@ export function ViewerApp(props: {
       <div className={shell}>
         <header className={header}>
           <div className={heading}>
+            {hasToc && (
+              <TocButton
+                expanded={tocExpanded}
+                onClick={() => {
+                  if (sidebarFits) {
+                    setSidebarOpen((open) => !open);
+                    return;
+                  }
+                  if (floating === "dwell") {
+                    setFloating("click");
+                    return;
+                  }
+                  setFloating((open) =>
+                    open === undefined ? "click" : undefined,
+                  );
+                }}
+              />
+            )}
             <div className={titleClass}>{title}</div>
           </div>
           <div className={actions}>
@@ -87,7 +217,7 @@ export function ViewerApp(props: {
             )}
             {props.headerActions}
             {props.mode === "local" && (
-              <DoneButton
+              <CloseServerButton
                 onClick={() => {
                   setShutDown(true);
                   // oxlint-disable-next-line typescript/no-floating-promises -- React click callbacks cannot await the server shutdown request.
@@ -97,35 +227,71 @@ export function ViewerApp(props: {
             )}
           </div>
         </header>
-        <div className={body} data-has-source-diffs={diffPanelOpen}>
-          <TableOfContents
-            headings={viewerDocument.headings}
-            articleRef={articleRef}
-          />
-          <article ref={articleRef} className={article}>
-            <div className={prose}>
-              <div className={content} data-diffmap-kind="page">
-                <ComarkView
-                  document={viewerDocument}
-                  selectedAnnotation={selection?.annotation}
-                  onSelectAnnotation={(line) => {
-                    setShowDiffPanel(true);
-                    setSelection({
-                      annotation: line,
-                      reference: line.references[0]!,
-                    });
-                  }}
-                />
-              </div>
-            </div>
-          </article>
-          {diffPanelOpen && (
-            <SourceDiffPanel
-              items={viewerDocument.sourceDiffs}
-              selection={selection}
-              onSelect={setSelection}
-            />
+        <div ref={stageRef} className={stage}>
+          {hasToc && !sidebarFits && (
+            <Drawer
+              isOpen={floating !== undefined}
+              onOpenChange={(open) => {
+                if (!open) setFloating(undefined);
+              }}
+              side="start"
+              isDismissable={floating === "click"}
+              aria-label="Table of contents"
+            >
+              <TableOfContents
+                headings={viewerDocument.headings}
+                articleRef={articleRef}
+                layout="panel"
+                onNavigate={() => setFloating(undefined)}
+              />
+            </Drawer>
           )}
+          <div
+            className={body}
+            data-has-source-diffs={diffPanelOpen}
+            data-toc={
+              !hasToc
+                ? "none"
+                : sidebarFits
+                  ? sidebarOpen
+                    ? "sidebar-open"
+                    : "sidebar-closed"
+                  : "float"
+            }
+          >
+            {hasToc && sidebarFits && (
+              <TableOfContents
+                headings={viewerDocument.headings}
+                articleRef={articleRef}
+                layout="sidebar"
+                collapsed={!sidebarOpen}
+              />
+            )}
+            <article ref={articleRef} className={article}>
+              <div className={prose}>
+                <div className={content} data-diffmap-kind="page">
+                  <ComarkView
+                    document={viewerDocument}
+                    selectedAnnotation={selection?.annotation}
+                    onSelectAnnotation={(line) => {
+                      setShowDiffPanel(true);
+                      setSelection({
+                        annotation: line,
+                        reference: line.references[0]!,
+                      });
+                    }}
+                  />
+                </div>
+              </div>
+            </article>
+            {diffPanelOpen && (
+              <SourceDiffPanel
+                items={viewerDocument.sourceDiffs}
+                selection={selection}
+                onSelect={setSelection}
+              />
+            )}
+          </div>
         </div>
       </div>
     </ViewerModeContext.Provider>
@@ -151,6 +317,11 @@ async function closeViewer() {
   await fetch("/__diffmap/shutdown", { method: "POST" });
 }
 
+const DWELL_MS = 280;
+const DWELL_LEAVE_PAD_PX = 48;
+const TOC_DWELL_EDGE_PX = 48;
+const TOC_DWELL_CANCEL_PX = 80;
+
 const styles = {
   shell: style(flex({ direction: "column" }), {
     width: "100%",
@@ -161,7 +332,7 @@ const styles = {
     backgroundColor: colors.gray[4],
   }),
   header: style(
-    flex({ direction: "row", align: "center", justify: "between" }),
+    flex({ direction: "row", alignItems: "center", justifyContent: "between" }),
     spacing.padding({ x: 6, y: 3 }),
     flexItem({ size: "hug" }),
     border(["bottom"], "border"),
@@ -170,8 +341,9 @@ const styles = {
       backgroundColor: backgroundColor.app,
     },
   ),
-  heading: style(flex({ direction: "column" }), {
+  heading: style(flex({ direction: "row", alignItems: "center", gap: 3 }), {
     minWidth: 0,
+    flex: "1 1 auto",
   }),
   title: style(text({ size: "md", fontWeight: 600, color: "highContrast" }), {
     minWidth: 0,
@@ -179,38 +351,53 @@ const styles = {
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   }),
-  actions: style(flex({ direction: "row", align: "center", gap: 3 }), {
+  actions: style(flex({ direction: "row", alignItems: "center", gap: 3 }), {
     flexShrink: 0,
+  }),
+  stage: style(flex({ direction: "column" }), {
+    position: "relative",
+    flex: "1 1 auto",
+    minWidth: 0,
+    minHeight: 0,
   }),
   body: style({
     display: "grid",
-    gridTemplateColumns: "var(--diffmap-columns)",
     gridTemplateRows: "minmax(0, 1fr)",
-    "--diffmap-columns": "minmax(0, max-content) minmax(0, 1fr)",
     flex: "1 1 auto",
     minHeight: 0,
     minWidth: 0,
     overflow: "hidden",
     backgroundColor: backgroundColor.app,
-    "&[data-has-source-diffs='true']": {
-      "--diffmap-columns":
-        "minmax(0, max-content) minmax(0, 1fr) minmax(0, 1fr)",
+    "--diffmap-columns": "minmax(0, 1fr)",
+    "--diffmap-areas": '"article"',
+    gridTemplateColumns: "var(--diffmap-columns)",
+    gridTemplateAreas: "var(--diffmap-areas)",
+    "&[data-toc='sidebar-open'], &[data-toc='sidebar-closed']": {
+      "--diffmap-columns": "max-content minmax(0, 1fr)",
+      "--diffmap-areas": '"toc article"',
     },
+    "&[data-has-source-diffs='true']": {
+      "--diffmap-columns": "minmax(0, 1fr) minmax(0, 1fr)",
+      "--diffmap-areas": '"article diff"',
+    },
+    "&[data-toc='sidebar-open'][data-has-source-diffs='true'], &[data-toc='sidebar-closed'][data-has-source-diffs='true']":
+      {
+        "--diffmap-columns": "max-content minmax(0, 1fr) minmax(0, 1fr)",
+        "--diffmap-areas": '"toc article diff"',
+      },
     "@media (max-width: 900px)": {
       gridTemplateColumns: "minmax(0, 1fr)",
       gridTemplateRows: "minmax(0, 1fr) auto",
+      gridTemplateAreas: '"article" "diff"',
     },
   }),
   article: style(spacing.padding({ x: 12, y: 12 }), {
-    gridColumn: "2",
+    gridArea: "article",
     flex: "1 1 auto",
     minWidth: 0,
     minHeight: 0,
     overflowY: "auto",
     backgroundColor: backgroundColor.app,
-    "@media (max-width: 900px)": {
-      gridColumn: "1",
-    },
   }),
   prose: style({
     display: "grid",
@@ -250,11 +437,23 @@ const styles = {
     },
   }),
   closed: style(
-    text({ size: "md", fontWeight: 500, color: "highContrast" }),
-    spacing.padding({ all: 12 }),
+    flex({
+      direction: "column",
+      alignItems: "center",
+      justifyContent: "center",
+    }),
+    spacing.padding({ x: 12, y: 12 }),
     {
       minHeight: "100vh",
       backgroundColor: backgroundColor.app,
+    },
+  ),
+  closedCopy: style(
+    flex({ direction: "column", alignItems: "center", gap: 3 }),
+    {
+      width: "100%",
+      maxWidth: proseMaxWidth,
+      textAlign: "center",
     },
   ),
 };

@@ -5,30 +5,50 @@ import type { ViewerHeading } from "../parseViewer.js";
 
 type TocItem = ViewerHeading & { children: TocItem[] };
 
+export const TOC_SIDEBAR_MIN_WIDTH_PX = 1101;
+export const TOC_WIDTH_PX = 240;
+
+export function hasTableOfContents(headings: ViewerHeading[]) {
+  return tocHeadings(headings).length > 0;
+}
+
 export function TableOfContents(props: {
   headings: ViewerHeading[];
   articleRef: RefObject<HTMLElement | null>;
+  layout: "sidebar" | "panel";
+  collapsed?: boolean;
+  onNavigate?: () => void;
 }) {
   const items = nestHeadings(tocHeadings(props.headings));
   const { activeId, setActiveId } = useActiveHeading(
     props.headings,
     props.articleRef,
   );
-  const navClass = useStyles(styles.nav);
+  const navClass = useStyles(
+    props.layout === "panel" ? styles.panel : styles.sidebar,
+  );
   const listClass = useStyles(styles.list);
   if (items.length === 0) return undefined;
+  const collapsed = props.layout === "sidebar" && props.collapsed === true;
 
   return (
     <nav
+      id="diffmap-toc"
       className={navClass}
       aria-label="Table of contents"
       data-diffmap-kind="toc"
+      data-open={String(!collapsed)}
+      aria-hidden={collapsed}
+      inert={collapsed}
     >
       <TocList
         items={items}
         className={listClass}
         activeId={activeId}
-        onSelect={setActiveId}
+        onSelect={(id) => {
+          setActiveId(id);
+          props.onNavigate?.();
+        }}
       />
     </nav>
   );
@@ -150,40 +170,60 @@ function useActiveHeading(
   return { activeId, setActiveId };
 }
 
+const tocListRules = {
+  "&[data-diffmap-kind='toc'] ol": {
+    listStyle: "none",
+    counterReset: "none",
+    margin: 0,
+    padding: 0,
+  },
+  "&[data-diffmap-kind='toc'] ol ol": {
+    paddingInlineStart: spacing.value(6),
+  },
+  "&[data-diffmap-kind='toc'] ol > li::before": {
+    content: "none",
+  },
+  "&[data-diffmap-kind='toc'] a": {
+    fontWeight: 400,
+    textDecoration: "none",
+  },
+} as const;
+
 const styles = {
-  nav: style(spacing.padding({ left: 16, right: 6, top: 8, bottom: 8 }), {
+  sidebar: style(spacing.padding({ left: 16, right: 6, top: 8, bottom: 8 }), {
     boxSizing: "border-box",
-    gridColumn: "1",
+    gridArea: "toc",
     alignSelf: "stretch",
-    minWidth: "240px",
-    width: "max-content",
-    maxWidth: "280px",
+    width: `${TOC_WIDTH_PX}px`,
+    minWidth: `${TOC_WIDTH_PX}px`,
     minHeight: 0,
     height: "fit-content",
     maxHeight: "100%",
     marginTop: "auto",
     marginBottom: "auto",
+    overflowX: "hidden",
     overflowY: "auto",
     backgroundColor: "transparent",
-    "@media (max-width: 1100px)": {
-      display: "none",
+    transition:
+      "width 180ms ease-in-out, min-width 180ms ease-in-out, padding 180ms ease-in-out, opacity 180ms ease-in-out",
+    "&[data-open='false']": {
+      width: 0,
+      minWidth: 0,
+      paddingInline: 0,
+      opacity: 0,
+      pointerEvents: "none",
     },
-    "&[data-diffmap-kind='toc'] ol": {
-      listStyle: "none",
-      counterReset: "none",
-      margin: 0,
-      padding: 0,
-    },
-    "&[data-diffmap-kind='toc'] ol ol": {
-      paddingInlineStart: spacing.value(6),
-    },
-    "&[data-diffmap-kind='toc'] ol > li::before": {
-      content: "none",
-    },
-    "&[data-diffmap-kind='toc'] a": {
-      fontWeight: 400,
-      textDecoration: "none",
-    },
+    ...tocListRules,
+  }),
+  panel: style(spacing.padding({ left: 4, right: 4, top: 8, bottom: 8 }), {
+    boxSizing: "border-box",
+    width: "100%",
+    minHeight: "100%",
+    overflowY: "auto",
+    backgroundColor: "transparent",
+    boxShadow: "none",
+    borderRadius: 0,
+    ...tocListRules,
   }),
   list: style(text({ size: "sm", fontWeight: 400, color: "lowContrast" })),
   item: style({
