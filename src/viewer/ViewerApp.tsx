@@ -165,9 +165,10 @@ export function ViewerApp(props: {
         target,
         quote: target.kind === "text" ? target.selection.quote : undefined,
       });
+      // Keep the popover on screen when the selection hugs an edge.
       setSelectionAnchor({
-        left: rect.left + rect.width / 2,
-        top: rect.top - 8,
+        left: clamp(rect.left + rect.width / 2, 80, window.innerWidth - 80),
+        top: clamp(rect.top - 8, 56, window.innerHeight - 8),
       });
     };
     document.addEventListener("pointerup", update);
@@ -441,6 +442,10 @@ function useViewerMeta(enabled: boolean) {
 
 async function closeViewer() {
   await fetch("/__diffmap/shutdown", { method: "POST" });
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
 const COMMENTS_PANEL_WIDTH = "minmax(0, 340px)";
