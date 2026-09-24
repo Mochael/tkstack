@@ -41,8 +41,6 @@ export const BLOCK_TAGS = [
   "h6",
   "li",
   "blockquote",
-  "td",
-  "th",
 ] as const;
 
 const blockTags = new Set<string>(BLOCK_TAGS);
@@ -76,12 +74,6 @@ export function makeTextBlock(input: {
 }): TextBlock {
   const text = normalizeBlockText(input.text);
   return { tag: input.tag, index: input.index, text, hash: textHash(text) };
-}
-
-export function documentHash(blocks: TextBlock[]) {
-  return textHash(
-    blocks.map((block) => `${block.tag}:${block.text}`).join("\n"),
-  );
 }
 
 /** Blocks as parsed from the markdown. The viewer uses the DOM instead. */
