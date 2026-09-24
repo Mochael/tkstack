@@ -14,6 +14,12 @@ const serveArgs = z.object({
 const serveOptions = z.object({
   port: z.coerce.number().optional().describe("Port (default: a free port)"),
   root: z.string().optional().describe("Workspace root for file excerpts"),
+  agentSession: z
+    .string()
+    .optional()
+    .describe(
+      "Coding-agent session id that Ask AI forks (env: DIFFMAP_AGENT_SESSION)",
+    ),
 });
 
 const serveOutput = z.object({
@@ -23,7 +29,11 @@ const serveOutput = z.object({
 
 type ServeContext = {
   args: { file: string };
-  options: { port?: number | undefined; root?: string | undefined };
+  options: {
+    port?: number | undefined;
+    root?: string | undefined;
+    agentSession?: string | undefined;
+  };
   error: (input: { code: string; message: string }) => never;
 };
 
@@ -35,6 +45,7 @@ async function* runServe(c: ServeContext) {
         ? resolveFromInvokeCwd(".")
         : resolveFromInvokeCwd(c.options.root),
     port: c.options.port,
+    agentSessionId: c.options.agentSession,
   });
   if (started instanceof Error) {
     return c.error({

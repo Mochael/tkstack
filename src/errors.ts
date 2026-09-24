@@ -39,3 +39,13 @@ export class DiffmapShareError extends errore.createTaggedError({
   name: "DiffmapShareError",
   message: "diffmap share failed: $reason",
 }) {}
+
+export class DiffmapCommentError extends errore.createTaggedError({
+  name: "DiffmapCommentError",
+  message: "diffmap comments failed: $reason",
+}) {}
+
+export class DiffmapAgentError extends errore.createTaggedError({
+  name: "DiffmapAgentError",
+  message: "diffmap agent failed: $reason",
+}) {}
