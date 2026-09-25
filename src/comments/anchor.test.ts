@@ -5,10 +5,15 @@ import {
   collectDocumentBlocks,
   makeTextBlock,
   resolveAnchor,
+  resolveTarget,
   textHash,
   type TextBlock,
 } from "./anchor.js";
-import type { CommentSelection, CommentSurface } from "./types.js";
+import type {
+  CommentSelection,
+  CommentSurface,
+  CommentTarget,
+} from "./types.js";
 
 function blocksOf(source: string) {
   const document = parseViewerDocument(source, "spec.md");
@@ -167,4 +172,76 @@ test("resolveAnchor treats a document surface as document-wide", () => {
 test("textHash is stable and length-salted", () => {
   assert.equal(textHash("hello"), textHash("hello"));
   assert.notEqual(textHash("hello"), textHash("hello "));
+});
+
+function rangeTo(blocks: TextBlock[], first: string, last: string) {
+  return {
+    kind: "range",
+    start: anchorTo(blocks, first),
+    end: anchorTo(blocks, last),
+    quote: `${first} … ${last}`,
+  } satisfies CommentTarget;
+}
+
+test("collectDocumentBlocks counts markdown table cells", () => {
+  const blocks = blocksOf(
+    "| Name | Value |\n| --- | --- |\n| alpha | one |\n| beta | two |\n",
+  );
+  assert.deepEqual(
+    blocks.map((block) => [block.tag, block.index, block.text]),
+    [
+      ["th", 0, "Name"],
+      ["th", 1, "Value"],
+      ["td", 0, "alpha"],
+      ["td", 1, "one"],
+      ["td", 2, "beta"],
+      ["td", 3, "two"],
+    ],
+  );
+});
+
+test("resolveTarget anchors a range across blocks exactly", () => {
+  const blocks = blocksOf(document);
+  const resolved = resolveTarget(
+    rangeTo(blocks, "falling back.", "The queue drains"),
+    blocks,
+  );
+  assert.equal(resolved.status, "exact");
+  if (resolved.status !== "exact") return;
+  assert.equal(resolved.from.block.tag, "p");
+  assert.equal(resolved.to.block.tag, "li");
+  assert.equal(resolved.to.start, 0);
+});
+
+test("resolveTarget relocates a range when a block is inserted above", () => {
+  const before = blocksOf(document);
+  const target = rangeTo(before, "falling back.", "The queue drains");
+  const after = blocksOf(
+    document.replace("# Recovery\n", "# Recovery\n\nA new intro.\n"),
+  );
+  assert.equal(resolveTarget(target, after).status, "relocated");
+});
+
+test("resolveTarget reports a range stale when either end is gone", () => {
+  const before = blocksOf(document);
+  const target = rangeTo(before, "falling back.", "The queue drains");
+  const after = blocksOf(document.replace("The queue drains", "Jobs resume"));
+  assert.equal(resolveTarget(target, after).status, "stale");
+});
+
+test("resolveTarget reports a range stale when its ends swap order", () => {
+  const before = blocksOf(document);
+  const target = rangeTo(before, "falling back.", "A closing paragraph.");
+  const swapped = blocksOf(
+    "# Recovery\n\nA closing paragraph.\n\nThe updater retries once before falling back.\n",
+  );
+  assert.equal(resolveTarget(target, swapped).status, "stale");
+});
+
+test("resolveTarget keeps unanchored quotes document-wide", () => {
+  const blocks = blocksOf(document);
+  assert.deepEqual(
+    resolveTarget({ kind: "document", quote: "const x = 1;" }, blocks),
+    { status: "document" },
+  );
 });

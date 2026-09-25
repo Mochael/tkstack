@@ -125,6 +125,54 @@ test("writeCommentStore leaves no temporary files behind", async () => {
   assert.deepEqual(await fs.readdir(dir), ["review.comments.json"]);
 });
 
+function rangeEnd(quote: string, index: number) {
+  return {
+    surface: { type: "block" as const, tag: "p", index, blockHash: "h" },
+    selection: { start: 0, length: quote.length, hash: "q", quote },
+  };
+}
+
+test("range and quoted document targets round-trip in a fixed key order", () => {
+  const store: CommentStore = {
+    version: 1,
+    threads: [
+      {
+        ...sample.threads[0]!,
+        threadId: "range",
+        target: {
+          kind: "range",
+          start: rangeEnd("first", 0),
+          end: rangeEnd("second", 1),
+          quote: "first … second",
+        },
+      },
+      {
+        ...sample.threads[0]!,
+        threadId: "unanchored",
+        createdAt: "2026-01-03T00:00:00.000Z",
+        target: { kind: "document", quote: "const x = 1;" },
+      },
+    ],
+  };
+  const serialized = serializeCommentStore(store);
+  const parsed = parseCommentStore(serialized, "review.comments.json");
+  assert.ok(!(parsed instanceof Error));
+  assert.deepEqual(
+    parsed.threads.map((thread) => thread.target),
+    store.threads.map((thread) => thread.target),
+  );
+  const raw = JSON.parse(serialized) as {
+    threads: { target: Record<string, unknown> }[];
+  };
+  assert.deepEqual(Object.keys(raw.threads[0]!.target), [
+    "kind",
+    "start",
+    "end",
+    "quote",
+  ]);
+  assert.equal(serializeCommentStore(parsed), serialized);
+});
+
 test("parseCommentStore rejects malformed sidecars", () => {
   assert.ok(parseCommentStore("not json", "x.json") instanceof Error);
   assert.ok(parseCommentStore('{"version":1}', "x.json") instanceof Error);

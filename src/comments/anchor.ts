@@ -9,7 +9,11 @@ import type {
   ViewerElement,
   ViewerNode,
 } from "../parseViewer.js";
-import type { CommentSelection, CommentSurface } from "./types.js";
+import type {
+  CommentSelection,
+  CommentSurface,
+  CommentTarget,
+} from "./types.js";
 
 export type TextBlock = {
   tag: string;
@@ -30,7 +34,18 @@ export type ResolvedAnchor =
   | { status: "document" }
   | { status: "stale" };
 
-/** Tags that can hold a reader's selection. Code fences are excluded. */
+export type AnchoredSpan = { block: TextBlock; start: number; length: number };
+
+/** A whole target resolved: `from` and `to` are the same span unless it is a range. */
+export type ResolvedTarget =
+  | { status: "exact" | "relocated"; from: AnchoredSpan; to: AnchoredSpan }
+  | { status: "document" }
+  | { status: "stale" };
+
+/**
+ * Tags that can hold a reader's selection. Code fences are excluded. Table
+ * cells are prose too; the viewer only counts cells of markdown tables.
+ */
 export const BLOCK_TAGS = [
   "p",
   "h1",
@@ -41,6 +56,8 @@ export const BLOCK_TAGS = [
   "h6",
   "li",
   "blockquote",
+  "th",
+  "td",
 ] as const;
 
 const blockTags = new Set<string>(BLOCK_TAGS);
@@ -155,6 +172,54 @@ export function resolveAnchor(input: {
     return { status: "relocated", block, start, length };
   }
   return { status: "stale" };
+}
+
+/**
+ * Resolve any target. A range resolves each end independently and is only
+ * anchored when both ends are, in document order; otherwise it is stale.
+ */
+export function resolveTarget(
+  target: CommentTarget,
+  blocks: TextBlock[],
+): ResolvedTarget {
+  if (target.kind === "document") return { status: "document" };
+  if (target.kind === "text") {
+    const resolved = resolveAnchor({ ...target, blocks });
+    if (resolved.status === "document" || resolved.status === "stale") {
+      return resolved;
+    }
+    const span = spanOf(resolved);
+    return { status: resolved.status, from: span, to: span };
+  }
+  const start = resolveAnchor({ ...target.start, blocks });
+  const end = resolveAnchor({ ...target.end, blocks });
+  if (
+    (start.status !== "exact" && start.status !== "relocated") ||
+    (end.status !== "exact" && end.status !== "relocated")
+  ) {
+    return { status: "stale" };
+  }
+  const from = spanOf(start);
+  const to = spanOf(end);
+  const fromIndex = blocks.indexOf(from.block);
+  const toIndex = blocks.indexOf(to.block);
+  if (
+    toIndex < fromIndex ||
+    (toIndex === fromIndex && to.start < from.start + from.length)
+  ) {
+    return { status: "stale" };
+  }
+  const status =
+    start.status === "exact" && end.status === "exact" ? "exact" : "relocated";
+  return { status, from, to };
+}
+
+function spanOf(anchor: {
+  block: TextBlock;
+  start: number;
+  length: number;
+}): AnchoredSpan {
+  return { block: anchor.block, start: anchor.start, length: anchor.length };
 }
 
 function quoteAt(block: TextBlock, start: number, quote: string) {

@@ -21,9 +21,27 @@ export type CommentSelection = {
   quote: string;
 };
 
+/** One end of a selection that spans blocks: the part of that block selected. */
+export type CommentRangeEnd = {
+  surface: CommentSurface;
+  selection: CommentSelection;
+};
+
+/**
+ * `document` with a quote is a selection in content that cannot be anchored
+ * (code excerpts, diffs): the quote is kept for display but never resolved.
+ * `range` spans blocks; each end resolves on its own, and `quote` is the whole
+ * selected text, for display and for the agent only.
+ */
 export type CommentTarget =
-  | { kind: "document" }
-  | { kind: "text"; surface: CommentSurface; selection: CommentSelection };
+  | { kind: "document"; quote?: string }
+  | { kind: "text"; surface: CommentSurface; selection: CommentSelection }
+  | {
+      kind: "range";
+      start: CommentRangeEnd;
+      end: CommentRangeEnd;
+      quote: string;
+    };
 
 export type CommentRole = "reader" | "agent";
 
@@ -70,6 +88,12 @@ export type CommentsSnapshot = {
   threads: CommentThread[];
   agent: CommentAgentStatus;
 };
+
+/** The text a target quotes, if any. */
+export function targetQuote(target: CommentTarget) {
+  if (target.kind === "text") return target.selection.quote;
+  return target.quote;
+}
 
 export function emptyCommentStore(): CommentStore {
   return { version: COMMENT_STORE_VERSION, threads: [] };

@@ -14,7 +14,9 @@ import { DiffmapCommentError } from "../errors.js";
 import {
   COMMENT_STORE_VERSION,
   emptyCommentStore,
+  type CommentRangeEnd,
   type CommentStore,
+  type CommentTarget,
   type CommentThread,
 } from "./types.js";
 
@@ -39,12 +41,23 @@ const selectionSchema = z.strictObject({
   quote: nonEmpty,
 });
 
+const rangeEndSchema = z.strictObject({
+  surface: surfaceSchema,
+  selection: selectionSchema,
+});
+
 export const commentTargetSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("document") }),
+  z.strictObject({ kind: z.literal("document"), quote: nonEmpty.optional() }),
   z.strictObject({
     kind: z.literal("text"),
     surface: surfaceSchema,
     selection: selectionSchema,
+  }),
+  z.strictObject({
+    kind: z.literal("range"),
+    start: rangeEndSchema,
+    end: rangeEndSchema,
+    quote: nonEmpty,
   }),
 ]);
 
@@ -183,25 +196,40 @@ function orderedThread(thread: CommentThread) {
   };
 }
 
-function orderedTarget(target: CommentThread["target"]) {
-  if (target.kind === "document") return { kind: target.kind };
+function orderedTarget(target: CommentTarget) {
+  if (target.kind === "document") {
+    return target.quote === undefined
+      ? { kind: target.kind }
+      : { kind: target.kind, quote: target.quote };
+  }
+  if (target.kind === "range") {
+    return {
+      kind: target.kind,
+      start: orderedEnd(target.start),
+      end: orderedEnd(target.end),
+      quote: target.quote,
+    };
+  }
+  return { kind: target.kind, ...orderedEnd(target) };
+}
+
+function orderedEnd(end: CommentRangeEnd) {
   const surface =
-    target.surface.type === "document"
-      ? { type: target.surface.type, documentHash: target.surface.documentHash }
+    end.surface.type === "document"
+      ? { type: end.surface.type, documentHash: end.surface.documentHash }
       : {
-          type: target.surface.type,
-          tag: target.surface.tag,
-          index: target.surface.index,
-          blockHash: target.surface.blockHash,
+          type: end.surface.type,
+          tag: end.surface.tag,
+          index: end.surface.index,
+          blockHash: end.surface.blockHash,
         };
   return {
-    kind: target.kind,
     surface,
     selection: {
-      start: target.selection.start,
-      length: target.selection.length,
-      hash: target.selection.hash,
-      quote: target.selection.quote,
+      start: end.selection.start,
+      length: end.selection.length,
+      hash: end.selection.hash,
+      quote: end.selection.quote,
     },
   };
 }

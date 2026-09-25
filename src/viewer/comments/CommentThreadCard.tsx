@@ -38,6 +38,7 @@ export function CommentThreadCard(props: {
   const quote = threadQuote(thread);
   const stale = props.entry.anchor.status === "stale";
   const relocated = props.entry.anchor.status === "relocated";
+  const unanchored = thread.target.kind === "document" && quote !== undefined;
   const pending = thread.agent?.state === "pending";
 
   return (
@@ -63,6 +64,7 @@ export function CommentThreadCard(props: {
         )}
         {relocated && <Badge>Moved</Badge>}
         {quote === undefined && <Badge>Whole document</Badge>}
+        {unanchored && <Badge>Not anchored</Badge>}
       </div>
       {quote !== undefined && (
         <blockquote className={quoteClass}>{quote}</blockquote>
@@ -71,6 +73,12 @@ export function CommentThreadCard(props: {
         <div className={noteClass}>
           The quoted text is no longer in the document. The comment is kept as
           written.
+        </div>
+      )}
+      {unanchored && (
+        <div className={noteClass}>
+          This selection is in content that cannot be highlighted, so the quote
+          is kept as written.
         </div>
       )}
       {thread.messages.map((message) => (
@@ -157,6 +165,11 @@ const styles = {
     margin: 0,
     borderLeft: `2px solid ${colors.yellow[8]}`,
     color: colors.gray[11],
+    // Range quotes can run long; keep the card scannable.
+    display: "-webkit-box",
+    WebkitLineClamp: 6,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
   }),
   message: style(flex({ direction: "column", gap: 1 })),
   author: style(text({ size: "2xs", color: "lowContrast" })),

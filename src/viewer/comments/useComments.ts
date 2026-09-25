@@ -12,20 +12,26 @@ import {
   type RefObject,
 } from "react";
 import {
-  resolveAnchor,
+  normalizeBlockText,
+  resolveTarget,
   textHash,
-  type ResolvedAnchor,
+  type AnchoredSpan,
+  type ResolvedTarget,
 } from "../../comments/anchor.js";
-import type {
-  CommentTarget,
-  CommentThread,
-  CommentsSnapshot,
+import {
+  targetQuote,
+  type CommentRangeEnd,
+  type CommentTarget,
+  type CommentThread,
+  type CommentsSnapshot,
 } from "../../comments/types.js";
 import {
   collectDomBlocks,
   findDomBlock,
-  rangeForOffsets,
+  rangeForSpans,
+  spansForSelection,
   type DomBlock,
+  type DomSpan,
 } from "./domBlocks.js";
 
 export const COMMENTS_ENDPOINT = "/__diffmap/comments";
@@ -34,7 +40,7 @@ const ACTIVE_HIGHLIGHT_NAME = "diffmap-comment-active";
 
 export type ResolvedThread = {
   thread: CommentThread;
-  anchor: ResolvedAnchor;
+  anchor: ResolvedTarget;
 };
 
 export type CommentsState = {
@@ -174,46 +180,94 @@ export function useComments(input: {
   };
 }
 
-export function selectionTarget(input: {
-  block: DomBlock;
-  start: number;
-  length: number;
-}): CommentTarget {
-  const quote = input.block.block.text.slice(
-    input.start,
-    input.start + input.length,
+/** Longest quote stored for a range or an unanchored selection. */
+const MAX_QUOTE_LENGTH = 600;
+
+/**
+ * The target for a live selection: one block, a range across blocks, or, for
+ * content that cannot be anchored (code excerpts, diffs), an unanchored
+ * comment that still keeps the quote.
+ */
+export function selectionTarget(
+  blocks: DomBlock[],
+  range: Range,
+): CommentTarget | undefined {
+  const spans = spansForSelection(blocks, range);
+  if (spans === undefined) {
+    const quote = clipQuote(normalizeBlockText(range.toString()));
+    return quote === "" ? undefined : { kind: "document", quote };
+  }
+  if (spans.from === spans.to) {
+    return { kind: "text", ...rangeEnd(spans.from) };
+  }
+  const start = rangeEnd(spans.from);
+  const end = rangeEnd(spans.to);
+  return {
+    kind: "range",
+    start,
+    end,
+    quote: clipQuote(rangeQuote(blocks, spans.from, spans.to)),
+  };
+}
+
+/** The selected text block by block, so adjacent blocks do not run together. */
+function rangeQuote(blocks: DomBlock[], from: DomSpan, to: DomSpan) {
+  const first = blocks.indexOf(from.block);
+  const last = blocks.indexOf(to.block);
+  const parts: string[] = [];
+  let outer: HTMLElement | undefined;
+  for (const [index, block] of blocks.entries()) {
+    if (index < first || index > last) continue;
+    // A nested list item's text is already in its parent's.
+    if (outer?.contains(block.element) === true) continue;
+    outer = block.element;
+    const text = block.block.text;
+    if (block === from.block) parts.push(text.slice(from.start));
+    else if (block === to.block)
+      parts.push(text.slice(0, to.start + to.length));
+    else parts.push(text);
+  }
+  return normalizeBlockText(parts.join(" "));
+}
+
+function rangeEnd(span: DomSpan): CommentRangeEnd {
+  const quote = span.block.block.text.slice(
+    span.start,
+    span.start + span.length,
   );
   return {
-    kind: "text",
     surface: {
       type: "block",
-      tag: input.block.block.tag,
-      index: input.block.block.index,
-      blockHash: input.block.block.hash,
+      tag: span.block.block.tag,
+      index: span.block.block.index,
+      blockHash: span.block.block.hash,
     },
     selection: {
-      start: input.start,
-      length: input.length,
+      start: span.start,
+      length: span.length,
       hash: textHash(quote),
       quote,
     },
   };
 }
 
-export function threadQuote(thread: CommentThread) {
-  return thread.target.kind === "text"
-    ? thread.target.selection.quote
-    : undefined;
+function clipQuote(quote: string) {
+  if (quote.length <= MAX_QUOTE_LENGTH) return quote;
+  const half = Math.floor(MAX_QUOTE_LENGTH / 2);
+  return `${quote.slice(0, half).trimEnd()} … ${quote.slice(-half).trimStart()}`;
 }
 
-function anchorFor(thread: CommentThread, blocks: DomBlock[]): ResolvedAnchor {
+export function threadQuote(thread: CommentThread) {
+  return targetQuote(thread.target);
+}
+
+function anchorFor(thread: CommentThread, blocks: DomBlock[]): ResolvedTarget {
   if (thread.target.kind === "document") return { status: "document" };
   if (blocks.length === 0) return { status: "stale" };
-  return resolveAnchor({
-    surface: thread.target.surface,
-    selection: thread.target.selection,
-    blocks: blocks.map((block) => block.block),
-  });
+  return resolveTarget(
+    thread.target,
+    blocks.map((block) => block.block),
+  );
 }
 
 /**
@@ -237,13 +291,10 @@ function paintHighlights(
     ) {
       continue;
     }
-    const domBlock = findDomBlock(blocks, entry.anchor.block);
-    if (domBlock === undefined) continue;
-    const range = rangeForOffsets(
-      domBlock,
-      entry.anchor.start,
-      entry.anchor.length,
-    );
+    const from = domSpan(blocks, entry.anchor.from);
+    const to = domSpan(blocks, entry.anchor.to);
+    if (from === undefined || to === undefined) continue;
+    const range = rangeForSpans(from, to);
     if (range === undefined) continue;
     if (entry.thread.threadId === activeThreadId) activeRanges.push(range);
     else ranges.push(range);
@@ -256,6 +307,11 @@ function paintHighlights(
   };
 }
 
+function domSpan(blocks: DomBlock[], span: AnchoredSpan): DomSpan | undefined {
+  const block = findDomBlock(blocks, span.block);
+  if (block === undefined) return undefined;
+  return { block, start: span.start, length: span.length };
+}
 type HighlightRegistry = {
   set: (name: string, ranges: Range[]) => void;
   delete: (name: string) => void;

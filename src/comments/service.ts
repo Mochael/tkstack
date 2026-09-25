@@ -21,6 +21,7 @@ import {
 } from "./store.js";
 import {
   emptyCommentStore,
+  targetQuote,
   type CommentMessage,
   type CommentStore,
   type CommentTarget,
@@ -134,10 +135,16 @@ export function createCommentService(input: {
 
   /** The block text the thread points at, for the agent prompt. */
   async function blockContext(target: CommentTarget) {
-    if (target.kind !== "text" || target.surface.type !== "block") {
+    const anchored =
+      target.kind === "text"
+        ? target
+        : target.kind === "range"
+          ? target.start
+          : undefined;
+    if (anchored === undefined || anchored.surface.type !== "block") {
       return undefined;
     }
-    const surface = target.surface;
+    const surface = anchored.surface;
     const source = await fs
       .readFile(input.filePath, "utf8")
       .catch(() => undefined);
@@ -168,10 +175,7 @@ export function createCommentService(input: {
         const last = thread.messages.at(-1);
         const prompt = buildCommentPrompt({
           threadId,
-          quote:
-            thread.target.kind === "text"
-              ? thread.target.selection.quote
-              : undefined,
+          quote: targetQuote(thread.target),
           blockContext: await blockContext(thread.target),
           body: last === undefined ? "" : last.body,
         });

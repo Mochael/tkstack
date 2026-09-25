@@ -21,7 +21,7 @@ import {
 } from "maui";
 import { style, useStyles } from "purse-styles";
 import type { ViewerDocument } from "../parseViewer.js";
-import type { CommentTarget } from "../comments/types.js";
+import { targetQuote, type CommentTarget } from "../comments/types.js";
 import { ComarkView } from "./ComarkView.tsx";
 import { SourceDiffPanel, type SourceSelection } from "./SourceDiffPanel.js";
 import { CloseServerButton } from "./CloseServerButton.tsx";
@@ -37,7 +37,6 @@ import {
   CommentsPanel,
   type CommentsFilter,
 } from "./comments/CommentsPanel.tsx";
-import { offsetsForSelection } from "./comments/domBlocks.js";
 import {
   SelectionPopover,
   type SelectionAnchor,
@@ -144,38 +143,38 @@ export function ViewerApp(props: {
         domSelection.rangeCount === 0
           ? undefined
           : domSelection.getRangeAt(0);
-      if (
+      // Any selection that touches the prose counts, including select-all.
+      const target =
         range === undefined ||
         contentEl === null ||
-        !contentEl.contains(range.commonAncestorContainer)
+        !range.intersectsNode(contentEl)
+          ? undefined
+          : selectionTarget(comments.blocks, range);
+      // An unanchored quote must not pick up text from outside the prose.
+      if (
+        range === undefined ||
+        target === undefined ||
+        (target.kind === "document" &&
+          contentEl?.contains(range.commonAncestorContainer) !== true)
       ) {
         setSelectionAnchor(undefined);
         setPendingSelection(undefined);
         return;
       }
-      const offsets = offsetsForSelection(comments.blocks, range);
-      if (offsets === undefined) {
-        setSelectionAnchor(undefined);
-        setPendingSelection(undefined);
-        return;
-      }
-      const target = selectionTarget(offsets);
       const rect = range.getBoundingClientRect();
-      setPendingSelection({
-        target,
-        quote: target.kind === "text" ? target.selection.quote : undefined,
-      });
+      setPendingSelection({ target, quote: targetQuote(target) });
       // Keep the popover on screen when the selection hugs an edge.
       setSelectionAnchor({
         left: clamp(rect.left + rect.width / 2, 80, window.innerWidth - 80),
         top: clamp(rect.top - 8, 56, window.innerHeight - 8),
       });
     };
-    document.addEventListener("pointerup", update);
-    document.addEventListener("keyup", update);
+    // Capture phase: react-aria tables stop pointerup from bubbling.
+    document.addEventListener("pointerup", update, true);
+    document.addEventListener("keyup", update, true);
     return () => {
-      document.removeEventListener("pointerup", update);
-      document.removeEventListener("keyup", update);
+      document.removeEventListener("pointerup", update, true);
+      document.removeEventListener("keyup", update, true);
     };
   }, [commentsEnabled, comments.blocks]);
 
