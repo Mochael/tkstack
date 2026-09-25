@@ -10,7 +10,7 @@
 
 import { execFile } from "node:child_process";
 import { DiffmapAgentError } from "../errors.js";
-import type { CommentAgentStatus } from "./types.js";
+import type { CommentAgentStatus, CommentMessage } from "./types.js";
 
 export type AgentCommand = {
   executable: string;
@@ -47,7 +47,7 @@ export function buildCommentPrompt(input: {
   threadId: string;
   quote: string | undefined;
   blockContext: string | undefined;
-  body: string;
+  messages: readonly CommentMessage[];
 }) {
   const parts = [commentPromptPrefix(input.threadId)];
   if (input.quote !== undefined && input.quote !== "") {
@@ -56,7 +56,14 @@ export function buildCommentPrompt(input: {
   if (input.blockContext !== undefined && input.blockContext !== "") {
     parts.push(`Surrounding block:\n${input.blockContext}\n\n`);
   }
-  parts.push(`Comment:\n${input.body}`);
+  parts.push("Thread conversation (oldest first):\n");
+  for (const message of input.messages) {
+    const role = message.role === "agent" ? "Agent" : "Reader";
+    parts.push(`\n${role} (${message.by}):\n${message.body}\n`);
+  }
+  parts.push(
+    "\nAnswer the latest reader message using the full conversation above.",
+  );
   return parts.join("");
 }
 

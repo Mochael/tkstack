@@ -288,6 +288,62 @@ test("askAgent records the forked command, appends the reply and notifies", asyn
   assert.deepEqual(states, [undefined, "pending", "done"]);
 });
 
+test("follow-up Ask AI includes the full persisted thread and excludes other threads", async () => {
+  const prompts: string[] = [];
+  const { service } = await harness({
+    run: async (input) => {
+      prompts.push(input.args.at(-1) ?? "");
+      return {
+        code: 0,
+        stdout: "The OS handles the second retry.",
+        stderr: "",
+      };
+    },
+  });
+  await post(service, "/__diffmap/comments", {
+    target: { kind: "document" },
+    body: "An unrelated thread.",
+  });
+  const created = jsonBody(
+    await post(service, "/__diffmap/comments", {
+      target: textTarget,
+      body: "Why only once?",
+      askAgent: true,
+    }),
+  );
+  const { threadId } = (created.body as { thread: { threadId: string } })
+    .thread;
+  await service.idle();
+  await post(service, `/__diffmap/comments/${threadId}/reply`, {
+    body: "Windows retries twice.",
+  });
+  await post(service, `/__diffmap/comments/${threadId}/reply`, {
+    body: "Does your answer also apply to Windows?",
+    askAgent: true,
+  });
+  await service.idle();
+
+  assert.equal(prompts.length, 2);
+  const followUp = prompts[1]!;
+  const bodies = [
+    "Why only once?",
+    "The OS handles the second retry.",
+    "Windows retries twice.",
+    "Does your answer also apply to Windows?",
+  ];
+  let previous = -1;
+  for (const body of bodies) {
+    const index = followUp.indexOf(body);
+    assert.ok(index > previous, `Missing or out-of-order message: ${body}`);
+    assert.equal(followUp.indexOf(body, index + body.length), -1);
+    previous = index;
+  }
+  assert.doesNotMatch(followUp, /An unrelated thread/);
+  assert.match(followUp, /Agent \(Agent\):\nThe OS handles/);
+  assert.match(followUp, /Selected text:\nretries once/);
+  assert.match(followUp, /Surrounding block:\nThe updater retries once/);
+});
+
 test("a failed agent run stores an error state instead of hanging", async () => {
   const { service } = await harness({
     run: async () =>

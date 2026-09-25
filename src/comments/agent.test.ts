@@ -8,6 +8,20 @@ import {
   type RunAgentCommand,
 } from "./agent.js";
 import { DiffmapAgentError } from "../errors.js";
+import type { CommentMessage } from "./types.js";
+
+function message(
+  body: string,
+  role: CommentMessage["role"] = "reader",
+): CommentMessage {
+  return {
+    id: body,
+    by: role === "reader" ? "Sam" : "Agent",
+    at: "2026-01-01T00:00:00Z",
+    role,
+    body,
+  };
+}
 
 function fakeRun(
   result: AgentRunOutput | Error,
@@ -37,12 +51,12 @@ test("buildCommentPrompt leads with the machine-readable thread header", () => {
     threadId: "t-1",
     quote: "retries once",
     blockContext: "The updater retries once before falling back.",
-    body: "Why only once?",
+    messages: [message("Why only once?")],
   });
   assert.equal(prompt.split("\n")[1], "diffmap-thread-id: t-1");
   assert.match(prompt, /Selected text:\nretries once/);
   assert.match(prompt, /Surrounding block:\nThe updater retries once/);
-  assert.match(prompt, /Comment:\nWhy only once\?$/);
+  assert.match(prompt, /Reader \(Sam\):\nWhy only once\?/);
 });
 
 test("buildCommentPrompt omits absent context", () => {
@@ -50,10 +64,33 @@ test("buildCommentPrompt omits absent context", () => {
     threadId: "t-2",
     quote: undefined,
     blockContext: undefined,
-    body: "General question.",
+    messages: [message("General question.")],
   });
   assert.doesNotMatch(prompt, /Selected text/);
-  assert.match(prompt, /Comment:\nGeneral question\.$/);
+  assert.match(prompt, /Reader \(Sam\):\nGeneral question\./);
+});
+
+test("buildCommentPrompt includes every reader and agent message in order", () => {
+  const prompt = buildCommentPrompt({
+    threadId: "t-3",
+    quote: undefined,
+    blockContext: undefined,
+    messages: [
+      message("First question."),
+      message("First answer.", "agent"),
+      message("A saved note."),
+      message("Follow-up question."),
+    ],
+  });
+  assert.ok(
+    prompt.includes(
+      "Reader (Sam):\nFirst question.\n\nAgent (Agent):\nFirst answer.\n\nReader (Sam):\nA saved note.\n\nReader (Sam):\nFollow-up question.",
+    ),
+  );
+  assert.match(
+    prompt,
+    /Answer the latest reader message using the full conversation above\.$/,
+  );
 });
 
 test("dispatch returns trimmed stdout and reports the command it ran", async () => {
