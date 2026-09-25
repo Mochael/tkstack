@@ -96,10 +96,18 @@ export function ViewerApp(props: {
   const [draft, setDraft] = useState<CommentDraft>();
   const [selectionAnchor, setSelectionAnchor] = useState<SelectionAnchor>();
   const [pendingSelection, setPendingSelection] = useState<CommentDraft>();
+  const openCommentThread = useCallback((threadId: string) => {
+    setDraft(undefined);
+    setSelectionAnchor(undefined);
+    setPendingSelection(undefined);
+    setActiveThreadId(threadId);
+    setCommentsOpen(true);
+  }, []);
   const comments = useComments({
     enabled: commentsEnabled,
     containerRef: contentRef,
     activeThreadId,
+    onActivate: openCommentThread,
   });
   const openComments = comments.threads.filter(
     (entry) => entry.thread.status === "open",

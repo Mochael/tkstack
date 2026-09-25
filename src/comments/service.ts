@@ -172,12 +172,11 @@ export function createCommentService(input: {
             reason: `unknown thread ${threadId}`,
           });
         }
-        const last = thread.messages.at(-1);
         const prompt = buildCommentPrompt({
           threadId,
           quote: targetQuote(thread.target),
           blockContext: await blockContext(thread.target),
-          body: last === undefined ? "" : last.body,
+          messages: thread.messages,
         });
         const updated = await mutate((current) =>
           updateThread(current, threadId, (item) => ({

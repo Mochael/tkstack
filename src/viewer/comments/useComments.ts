@@ -69,6 +69,7 @@ export function useComments(input: {
   enabled: boolean;
   containerRef: RefObject<HTMLElement | null>;
   activeThreadId: string | undefined;
+  onActivate: (threadId: string) => void;
 }): CommentsState {
   const [snapshot, setSnapshot] = useState<CommentsSnapshot>({
     threads: [],
@@ -130,8 +131,23 @@ export function useComments(input: {
 
   useEffect(() => {
     if (!input.enabled) return;
-    return paintHighlights(threads, blocks, input.activeThreadId);
-  }, [input.enabled, threads, blocks, input.activeThreadId]);
+    const container = input.containerRef.current;
+    if (container === null) return;
+    return paintHighlights(
+      threads,
+      blocks,
+      input.activeThreadId,
+      container,
+      input.onActivate,
+    );
+  }, [
+    input.enabled,
+    threads,
+    blocks,
+    input.activeThreadId,
+    input.containerRef,
+    input.onActivate,
+  ]);
 
   const send = useCallback(async (url: string, body: unknown) => {
     const response = await fetch(url, {
@@ -284,11 +300,14 @@ function paintHighlights(
   threads: ResolvedThread[],
   blocks: DomBlock[],
   activeThreadId: string | undefined,
+  container: HTMLElement,
+  onActivate: (threadId: string) => void,
 ) {
   const registry = highlightRegistry();
   if (registry === undefined) return;
   const ranges: Range[] = [];
   const activeRanges: Range[] = [];
+  const threadRanges: { threadId: string; range: Range }[] = [];
   for (const entry of threads) {
     if (entry.thread.status === "resolved") continue;
     if (
@@ -302,12 +321,51 @@ function paintHighlights(
     if (from === undefined || to === undefined) continue;
     const range = rangeForSpans(from, to);
     if (range === undefined) continue;
+    threadRanges.push({ threadId: entry.thread.threadId, range });
     if (entry.thread.threadId === activeThreadId) activeRanges.push(range);
     else ranges.push(range);
   }
   registry.set(HIGHLIGHT_NAME, ranges);
   registry.set(ACTIVE_HIGHLIGHT_NAME, activeRanges);
+  const onClick = (event: MouseEvent) => {
+    // Leave text selection, modified clicks and embedded controls alone.
+    if (
+      event.button !== 0 ||
+      event.detail !== 1 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      window.getSelection()?.isCollapsed === false
+    )
+      return;
+    if (
+      event.target instanceof Element &&
+      event.target.closest(
+        "a, button, input, textarea, select, [contenteditable]",
+      )
+    )
+      return;
+    // Use individual text rectangles so wrapped lines and cross-block ranges
+    // do not make the whitespace between highlighted text clickable.
+    const matches = threadRanges.filter(({ range }) =>
+      Array.from(range.getClientRects()).some(
+        (rect) =>
+          rect.width > 0 &&
+          rect.height > 0 &&
+          event.clientX >= rect.left &&
+          event.clientX < rect.right &&
+          event.clientY >= rect.top &&
+          event.clientY < rect.bottom,
+      ),
+    );
+    const hit =
+      matches.find(({ threadId }) => threadId === activeThreadId) ?? matches[0];
+    if (hit !== undefined) onActivate(hit.threadId);
+  };
+  container.addEventListener("click", onClick);
   return () => {
+    container.removeEventListener("click", onClick);
     registry.delete(HIGHLIGHT_NAME);
     registry.delete(ACTIVE_HIGHLIGHT_NAME);
   };
