@@ -1,5 +1,10 @@
 import {
+  ArrowLeft,
   Button,
+  Check,
+  Close,
+  Message,
+  Refresh,
   backgroundColor,
   border,
   colors,
@@ -9,132 +14,200 @@ import {
 } from "maui";
 import { style, useStyles } from "purse-styles";
 import type { CommentTarget } from "../../comments/types.js";
-import { CommentComposer } from "./CommentComposer.tsx";
-import { CommentThreadCard } from "./CommentThreadCard.tsx";
-import type { CommentsState } from "./useComments.js";
+import { CommentThreadChat } from "./CommentThreadChat.tsx";
+import { CommentThreadRow } from "./CommentThreadRow.tsx";
+import { threadQuote, type CommentsState } from "./useComments.js";
 
-export type CommentsFilter = "open" | "all";
+export type CommentDraft = {
+  target: CommentTarget;
+  quote: string | undefined;
+};
 
+/**
+ * The comments sidebar has two pages: the thread list, and one thread as a
+ * chat (or a new thread being started). The back button returns to the list.
+ */
 export function CommentsPanel(props: {
   comments: CommentsState;
-  filter: CommentsFilter;
-  onFilterChange: (filter: CommentsFilter) => void;
-  draft: { target: CommentTarget; quote: string | undefined } | undefined;
-  onDraftChange: (
-    draft: { target: CommentTarget; quote: string | undefined } | undefined,
-  ) => void;
+  draft: CommentDraft | undefined;
+  onDraftChange: (draft: CommentDraft | undefined) => void;
   activeThreadId: string | undefined;
   onActivate: (threadId: string | undefined) => void;
+  onClose: () => void;
 }) {
   const panel = useStyles(styles.panel);
   const header = useStyles(styles.header);
-  const heading = useStyles(styles.heading);
-  const filters = useStyles(styles.filters);
+  const headerStart = useStyles(styles.headerStart);
+  const headerEnd = useStyles(styles.headerEnd);
+  const title = useStyles(styles.title);
+  const count = useStyles(styles.count);
+  const back = useStyles(styles.back);
   const list = useStyles(styles.list);
-  const draftBox = useStyles(styles.draft);
-  const quoteClass = useStyles(styles.quote);
-  const emptyClass = useStyles(styles.empty);
+  const empty = useStyles(styles.empty);
   const errorClass = useStyles(styles.error);
+  const resolvedSection = useStyles(styles.resolved);
+  const resolvedSummary = useStyles(styles.resolvedSummary);
 
-  const visible = props.comments.threads.filter(
-    (entry) => props.filter === "all" || entry.thread.status === "open",
+  const { comments, draft } = props;
+  const open = comments.threads.filter(
+    (entry) => entry.thread.status === "open",
   );
-  const draft = props.draft;
+  const resolved = comments.threads.filter(
+    (entry) => entry.thread.status === "resolved",
+  );
+  const active = comments.threads.find(
+    (entry) => entry.thread.threadId === props.activeThreadId,
+  );
+  const page =
+    draft !== undefined ? "new" : active !== undefined ? "thread" : "list";
+
+  function showList() {
+    props.onDraftChange(undefined);
+    props.onActivate(undefined);
+  }
+
+  const rows = (entries: typeof open) =>
+    entries.map((entry) => (
+      <CommentThreadRow
+        key={entry.thread.threadId}
+        entry={entry}
+        active={entry.thread.threadId === props.activeThreadId}
+        onSelect={() => props.onActivate(entry.thread.threadId)}
+      />
+    ));
 
   return (
     <aside id="diffmap-comments-panel" className={panel} aria-label="Comments">
       <div className={header}>
-        <div className={heading}>Comments</div>
-        <div className={filters}>
+        <div className={headerStart}>
+          {page === "list" ? (
+            <>
+              <span className={title}>Comments</span>
+              <span className={count}>{open.length} open</span>
+            </>
+          ) : (
+            <button
+              type="button"
+              className={back}
+              aria-label="Show all comments"
+              onClick={showList}
+            >
+              <ArrowLeft size="sm" />
+              <span>Comments</span>
+              <span className={count}>{open.length}</span>
+            </button>
+          )}
+        </div>
+        <div className={headerEnd}>
+          {page === "list" && (
+            <Button
+              variant="quiet"
+              onClick={() => {
+                props.onActivate(undefined);
+                props.onDraftChange({
+                  target: { kind: "document" },
+                  quote: undefined,
+                });
+              }}
+            >
+              + New comment
+            </Button>
+          )}
+          {page === "thread" && active !== undefined && (
+            <Button
+              variant="quiet"
+              onClick={() => {
+                // oxlint-disable-next-line typescript/no-floating-promises -- Errors surface on the panel through the hook.
+                void comments.setStatus({
+                  threadId: active.thread.threadId,
+                  status:
+                    active.thread.status === "resolved" ? "open" : "resolved",
+                });
+              }}
+            >
+              {active.thread.status === "resolved" ? (
+                <Refresh size="sm" />
+              ) : (
+                <Check size="sm" />
+              )}
+              {active.thread.status === "resolved" ? "Reopen" : "Resolve"}
+            </Button>
+          )}
           <Button
             variant="quiet"
-            aria-pressed={props.filter === "open"}
-            onClick={() => props.onFilterChange("open")}
+            aria-label="Close comments"
+            onClick={props.onClose}
           >
-            Open
-          </Button>
-          <Button
-            variant="quiet"
-            aria-pressed={props.filter === "all"}
-            onClick={() => props.onFilterChange("all")}
-          >
-            All
+            <Close size="sm" />
           </Button>
         </div>
       </div>
-      {props.comments.error !== undefined && (
-        <div className={errorClass}>{props.comments.error}</div>
+      {comments.error !== undefined && (
+        <div className={errorClass}>{comments.error}</div>
       )}
-      <div className={list}>
-        {draft !== undefined && (
-          <div className={draftBox}>
-            {draft.quote === undefined ? (
-              <div className={quoteClass}>Comment on the whole document</div>
-            ) : (
-              <blockquote className={quoteClass}>{draft.quote}</blockquote>
-            )}
-            <CommentComposer
-              agent={props.comments.agent}
-              placeholder="Leave a comment…"
-              submitLabel="Submit"
-              autoFocus
-              onCancel={() => props.onDraftChange(undefined)}
-              onSubmit={(input) => {
-                props.onDraftChange(undefined);
-                // oxlint-disable-next-line typescript/no-floating-promises -- Errors surface on the panel through the hook.
-                void props.comments.createThread({
-                  target: draft.target,
-                  body: input.body,
-                  askAgent: input.askAgent,
-                });
-              }}
-            />
-          </div>
-        )}
-        {visible.length === 0 && draft === undefined && (
-          <div className={emptyClass}>
-            Select text in the document and choose Comment, or start a comment
-            on the whole document below.
-          </div>
-        )}
-        {visible.map((entry) => (
-          <CommentThreadCard
-            key={entry.thread.threadId}
-            entry={entry}
-            agent={props.comments.agent}
-            active={entry.thread.threadId === props.activeThreadId}
-            onActivate={() => props.onActivate(entry.thread.threadId)}
-            onReply={(input) => {
-              // oxlint-disable-next-line typescript/no-floating-promises -- Errors surface on the panel through the hook.
-              void props.comments.reply({
-                threadId: entry.thread.threadId,
+      {page === "new" && draft !== undefined && (
+        <CommentThreadChat
+          entry={undefined}
+          quote={draft.quote}
+          agent={comments.agent}
+          onCancel={showList}
+          onSubmit={(input) => {
+            // oxlint-disable-next-line typescript/no-floating-promises -- Errors surface on the panel through the hook.
+            void comments
+              .createThread({
+                target: draft.target,
                 body: input.body,
                 askAgent: input.askAgent,
-              });
-            }}
-            onSetStatus={(status) => {
-              // oxlint-disable-next-line typescript/no-floating-promises -- Errors surface on the panel through the hook.
-              void props.comments.setStatus({
-                threadId: entry.thread.threadId,
-                status,
-              });
-            }}
-          />
-        ))}
-      </div>
-      {draft === undefined && (
-        <div className={header}>
-          <Button
-            variant="quiet"
-            onClick={() =>
-              props.onDraftChange({
-                target: { kind: "document" },
-                quote: undefined,
               })
-            }
-          >
-            Comment on the document
-          </Button>
+              .then((threadId) => {
+                if (threadId === undefined) return;
+                // Asking opens the thread to watch the answer; posting for
+                // later goes back to the list.
+                props.onActivate(input.askAgent ? threadId : undefined);
+                props.onDraftChange(undefined);
+              });
+          }}
+        />
+      )}
+      {page === "thread" && active !== undefined && (
+        <CommentThreadChat
+          entry={active}
+          quote={threadQuote(active.thread)}
+          agent={comments.agent}
+          onSubmit={(input) => {
+            // oxlint-disable-next-line typescript/no-floating-promises -- Errors surface on the panel through the hook.
+            void comments.reply({
+              threadId: active.thread.threadId,
+              body: input.body,
+              askAgent: input.askAgent,
+            });
+          }}
+        />
+      )}
+      {page === "list" && (
+        <div className={list}>
+          {open.length === 0 && (
+            <div className={empty}>
+              <Message size="md" />
+              <strong>
+                {resolved.length > 0 ? "No open comments" : "No comments yet"}
+              </strong>
+              <span>
+                {resolved.length > 0
+                  ? "Resolved comments are listed below."
+                  : "Select anything in the document and choose Comment."}
+              </span>
+            </div>
+          )}
+          {rows(open)}
+          {resolved.length > 0 && (
+            <details className={resolvedSection}>
+              <summary className={resolvedSummary}>
+                Resolved <span className={count}>{resolved.length}</span>
+              </summary>
+              {rows(resolved)}
+            </details>
+          )}
         </div>
       )}
     </aside>
@@ -147,33 +220,55 @@ const styles = {
     minWidth: 0,
     minHeight: 0,
     overflow: "hidden",
-    backgroundColor: colors.gray[2],
+    backgroundColor: backgroundColor.app,
   }),
   header: style(
-    flex({ direction: "row", alignItems: "center", justifyContent: "between" }),
-    spacing.padding({ x: 4, y: 3 }),
+    flex({ direction: "row", alignItems: "center", gap: 2 }),
+    spacing.padding({ x: 3, y: 2 }),
     border(["bottom"], "border"),
-    { backgroundColor: backgroundColor.app, flexShrink: 0 },
+    { justifyContent: "space-between", flexShrink: 0, minHeight: "48px" },
   ),
-  heading: style(text({ size: "sm", fontWeight: 600, color: "highContrast" })),
-  filters: style(flex({ direction: "row", gap: 1 }), {
-    "& button[aria-pressed='true']": {
-      backgroundColor: backgroundColor.elementActive,
+  headerStart: style(
+    flex({ direction: "row", alignItems: "baseline", gap: 2 }),
+    {
+      minWidth: 0,
+      paddingLeft: "4px",
     },
-  }),
+  ),
+  headerEnd: style(flex({ direction: "row", alignItems: "center", gap: 1 })),
+  title: style(text({ size: "sm", fontWeight: 600, color: "highContrast" })),
+  count: style(text({ size: "xs", color: "lowContrast" })),
+  back: style(
+    flex({ direction: "row", alignItems: "center", gap: 2 }),
+    text({ size: "sm", color: "highContrast" }),
+    {
+      padding: 0,
+      border: "none",
+      background: "none",
+      font: "inherit",
+      cursor: "pointer",
+      "&:hover": { color: colors.blue[11] },
+    },
+  ),
   list: style(
-    flex({ direction: "column", gap: 3 }),
-    spacing.padding({ x: 4, y: 4 }),
+    flex({ direction: "column", gap: 2 }),
+    spacing.padding({ x: 3, y: 3 }),
     { flex: "1 1 auto", minHeight: 0, overflowY: "auto" },
   ),
-  draft: style(flex({ direction: "column", gap: 2 })),
-  quote: style(text({ size: "xs" }), spacing.padding({ x: 2 }), {
-    margin: 0,
-    borderLeft: `2px solid ${colors.yellow[8]}`,
-    color: colors.gray[11],
-  }),
-  empty: style(text({ size: "xs", color: "lowContrast" })),
+  empty: style(
+    flex({ direction: "column", alignItems: "center", gap: 1 }),
+    text({ size: "xs", color: "lowContrast" }),
+    { padding: "32px 16px", textAlign: "center" },
+  ),
   error: style(text({ size: "xs" }), spacing.padding({ x: 4, y: 2 }), {
     color: colors.red[11],
+    flexShrink: 0,
+  }),
+  resolved: style(flex({ direction: "column", gap: 2 }), {
+    "& > summary": { listStylePosition: "inside" },
+  }),
+  resolvedSummary: style(text({ size: "xs", color: "lowContrast" }), {
+    cursor: "pointer",
+    padding: "4px 0",
   }),
 };

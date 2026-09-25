@@ -21,7 +21,7 @@ import {
 } from "maui";
 import { style, useStyles } from "purse-styles";
 import type { ViewerDocument } from "../parseViewer.js";
-import { targetQuote, type CommentTarget } from "../comments/types.js";
+import { targetQuote } from "../comments/types.js";
 import { ComarkView } from "./ComarkView.tsx";
 import { SourceDiffPanel, type SourceSelection } from "./SourceDiffPanel.js";
 import { CloseServerButton } from "./CloseServerButton.tsx";
@@ -33,10 +33,7 @@ import {
   TOC_OVERLAY_MIN_WIDTH_PX,
 } from "./TableOfContents.tsx";
 import { CommentsButton } from "./comments/CommentsButton.tsx";
-import {
-  CommentsPanel,
-  type CommentsFilter,
-} from "./comments/CommentsPanel.tsx";
+import { CommentsPanel, type CommentDraft } from "./comments/CommentsPanel.tsx";
 import {
   SelectionPopover,
   type SelectionAnchor,
@@ -47,11 +44,6 @@ import { ViewerModeContext, type ViewerMode } from "./viewerMode.ts";
 
 type ViewerMeta = {
   title: string;
-};
-
-type CommentDraft = {
-  target: CommentTarget;
-  quote: string | undefined;
 };
 
 export function ViewerApp(props: {
@@ -100,7 +92,6 @@ export function ViewerApp(props: {
   const suppressTocReopen = useRef(false);
   const commentsEnabled = props.mode === "local";
   const [commentsOpen, setCommentsOpen] = useState(false);
-  const [commentsFilter, setCommentsFilter] = useState<CommentsFilter>("open");
   const [activeThreadId, setActiveThreadId] = useState<string>();
   const [draft, setDraft] = useState<CommentDraft>();
   const [selectionAnchor, setSelectionAnchor] = useState<SelectionAnchor>();
@@ -389,12 +380,11 @@ export function ViewerApp(props: {
             {commentsPanelOpen && (
               <CommentsPanel
                 comments={comments}
-                filter={commentsFilter}
-                onFilterChange={setCommentsFilter}
                 draft={draft}
                 onDraftChange={setDraft}
                 activeThreadId={activeThreadId}
                 onActivate={setActiveThreadId}
+                onClose={() => setCommentsOpen(false)}
               />
             )}
           </div>
@@ -403,6 +393,7 @@ export function ViewerApp(props: {
               anchor={selectionAnchor}
               onComment={() => {
                 setDraft(pendingSelection);
+                setActiveThreadId(undefined);
                 setCommentsOpen(true);
                 setSelectionAnchor(undefined);
                 setPendingSelection(undefined);

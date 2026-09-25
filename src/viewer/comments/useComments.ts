@@ -48,11 +48,12 @@ export type CommentsState = {
   agent: CommentsSnapshot["agent"];
   error: string | undefined;
   blocks: DomBlock[];
+  /** Resolves to the new thread's id, or undefined if the request failed. */
   createThread: (input: {
     target: CommentTarget;
     body: string;
     askAgent: boolean;
-  }) => Promise<void>;
+  }) => Promise<string | undefined>;
   reply: (input: {
     threadId: string;
     body: string;
@@ -140,16 +141,19 @@ export function useComments(input: {
     }).catch((cause: unknown) => cause as Error);
     if (response instanceof Error) {
       setError(response.message);
-      return;
+      return undefined;
     }
+    // SAFETY: the diffmap server answers these routes with `{thread}` or `{error}`.
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      thread?: CommentThread;
+    };
     if (!response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as {
-        error?: string;
-      };
       setError(payload.error ?? `Request failed (${String(response.status)})`);
-      return;
+      return undefined;
     }
     setError(undefined);
+    return payload.thread;
   }, []);
 
   return {
@@ -158,23 +162,25 @@ export function useComments(input: {
     error,
     blocks,
     createThread: useCallback(
-      async (created) => await send(COMMENTS_ENDPOINT, created),
+      async (created) => (await send(COMMENTS_ENDPOINT, created))?.threadId,
       [send],
     ),
     reply: useCallback(
-      async (replied) =>
+      async (replied) => {
         await send(
           `${COMMENTS_ENDPOINT}/${encodeURIComponent(replied.threadId)}/reply`,
           { body: replied.body, askAgent: replied.askAgent },
-        ),
+        );
+      },
       [send],
     ),
     setStatus: useCallback(
-      async (next) =>
+      async (next) => {
         await send(
           `${COMMENTS_ENDPOINT}/${encodeURIComponent(next.threadId)}/resolve`,
           { status: next.status },
-        ),
+        );
+      },
       [send],
     ),
   };

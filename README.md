@@ -37,9 +37,11 @@ ends that way and is anchored only while both still resolve, in order.
 Selections in content that cannot be anchored, such as code excerpts, keep
 their quote but are marked **Not anchored**.
 
-The composer's second button, **Ask AI**, also dispatches the thread to the
-coding agent that launched the viewer, and its answer streams back into the
-thread without a reload:
+The composer's primary button, **Ask** (also <kbd>Enter</kbd>), posts the
+comment and dispatches the thread to the coding agent that launched the viewer;
+its answer streams back into the thread without a reload. The chevron beside it
+posts the comment for later without asking. <kbd>Shift</kbd>+<kbd>Enter</kbd>
+adds a new line:
 
 ```sh
 diffmap serve spec.md --agent-session <session-id>   # or DIFFMAP_AGENT_SESSION
