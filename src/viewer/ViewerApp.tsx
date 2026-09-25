@@ -21,6 +21,7 @@ import {
 } from "maui";
 import { style, useStyles } from "purse-styles";
 import type { ViewerDocument } from "../parseViewer.js";
+import { targetQuote } from "../comments/types.js";
 import { ComarkView } from "./ComarkView.tsx";
 import { SourceDiffPanel, type SourceSelection } from "./SourceDiffPanel.js";
 import { CloseServerButton } from "./CloseServerButton.tsx";
@@ -31,6 +32,13 @@ import {
   TableOfContents,
   TOC_OVERLAY_MIN_WIDTH_PX,
 } from "./TableOfContents.tsx";
+import { CommentsButton } from "./comments/CommentsButton.tsx";
+import { CommentsPanel, type CommentDraft } from "./comments/CommentsPanel.tsx";
+import {
+  SelectionPopover,
+  type SelectionAnchor,
+} from "./comments/SelectionPopover.tsx";
+import { selectionTarget, useComments } from "./comments/useComments.js";
 import { useMediaQuery } from "./useMediaQuery.ts";
 import { ViewerModeContext, type ViewerMode } from "./viewerMode.ts";
 
@@ -71,6 +79,7 @@ export function ViewerApp(props: {
   const closedCopy = useStyles(styles.closedCopy);
   const stage = useStyles(styles.stage);
   const articleRef = useRef<HTMLElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const dwellTimer = useRef<number>(undefined);
   const hasToc = hasTableOfContents(viewerDocument.headings);
@@ -81,6 +90,21 @@ export function ViewerApp(props: {
   const [floating, setFloating] = useState<"click" | "dwell">();
   const tocExpanded = tocFits ? overlayOpen : floating !== undefined;
   const suppressTocReopen = useRef(false);
+  const commentsEnabled = props.mode === "local";
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [activeThreadId, setActiveThreadId] = useState<string>();
+  const [draft, setDraft] = useState<CommentDraft>();
+  const [selectionAnchor, setSelectionAnchor] = useState<SelectionAnchor>();
+  const [pendingSelection, setPendingSelection] = useState<CommentDraft>();
+  const comments = useComments({
+    enabled: commentsEnabled,
+    containerRef: contentRef,
+    activeThreadId,
+  });
+  const openComments = comments.threads.filter(
+    (entry) => entry.thread.status === "open",
+  ).length;
+  const commentsPanelOpen = commentsEnabled && commentsOpen;
 
   const dismissFloatingToc = useCallback(() => {
     // Maui springs the panel closed only if Dismiss/Escape/scrim run while
@@ -97,6 +121,53 @@ export function ViewerApp(props: {
   useEffect(() => {
     document.title = title;
   }, [title]);
+
+  // A selection inside the prose offers a Comment button anchored to it.
+  useEffect(() => {
+    if (!commentsEnabled) return;
+    const update = () => {
+      const domSelection = window.getSelection();
+      const contentEl = contentRef.current;
+      const range =
+        domSelection === null ||
+        domSelection.isCollapsed ||
+        domSelection.rangeCount === 0
+          ? undefined
+          : domSelection.getRangeAt(0);
+      // Any selection that touches the prose counts, including select-all.
+      const target =
+        range === undefined ||
+        contentEl === null ||
+        !range.intersectsNode(contentEl)
+          ? undefined
+          : selectionTarget(comments.blocks, range);
+      // An unanchored quote must not pick up text from outside the prose.
+      if (
+        range === undefined ||
+        target === undefined ||
+        (target.kind === "document" &&
+          contentEl?.contains(range.commonAncestorContainer) !== true)
+      ) {
+        setSelectionAnchor(undefined);
+        setPendingSelection(undefined);
+        return;
+      }
+      const rect = range.getBoundingClientRect();
+      setPendingSelection({ target, quote: targetQuote(target) });
+      // Keep the popover on screen when the selection hugs an edge.
+      setSelectionAnchor({
+        left: clamp(rect.left + rect.width / 2, 80, window.innerWidth - 80),
+        top: clamp(rect.top - 8, 56, window.innerHeight - 8),
+      });
+    };
+    // Capture phase: react-aria tables stop pointerup from bubbling.
+    document.addEventListener("pointerup", update, true);
+    document.addEventListener("keyup", update, true);
+    return () => {
+      document.removeEventListener("pointerup", update, true);
+      document.removeEventListener("keyup", update, true);
+    };
+  }, [commentsEnabled, comments.blocks]);
 
   useEffect(() => {
     return () => window.clearTimeout(dwellTimer.current);
@@ -236,6 +307,13 @@ export function ViewerApp(props: {
                 onClick={() => setShowDiffPanel((open) => !open)}
               />
             )}
+            {commentsEnabled && (
+              <CommentsButton
+                pressed={commentsPanelOpen}
+                openCount={openComments}
+                onClick={() => setCommentsOpen((open) => !open)}
+              />
+            )}
             {props.headerActions}
             {props.mode === "local" && (
               <CloseServerButton
@@ -266,10 +344,18 @@ export function ViewerApp(props: {
               />
             </Drawer>
           )}
-          <div className={body} data-has-source-diffs={diffPanelOpen}>
+          <div
+            className={body}
+            data-has-source-diffs={diffPanelOpen}
+            data-has-comments={commentsPanelOpen}
+          >
             <article ref={articleRef} className={article}>
               <div className={prose}>
-                <div className={content} data-diffmap-kind="page">
+                <div
+                  ref={contentRef}
+                  className={content}
+                  data-diffmap-kind="page"
+                >
                   <ComarkView
                     document={viewerDocument}
                     selectedAnnotation={selection?.annotation}
@@ -291,7 +377,30 @@ export function ViewerApp(props: {
                 onSelect={setSelection}
               />
             )}
+            {commentsPanelOpen && (
+              <CommentsPanel
+                comments={comments}
+                draft={draft}
+                onDraftChange={setDraft}
+                activeThreadId={activeThreadId}
+                onActivate={setActiveThreadId}
+                onClose={() => setCommentsOpen(false)}
+              />
+            )}
           </div>
+          {selectionAnchor !== undefined && pendingSelection !== undefined && (
+            <SelectionPopover
+              anchor={selectionAnchor}
+              onComment={() => {
+                setDraft(pendingSelection);
+                setActiveThreadId(undefined);
+                setCommentsOpen(true);
+                setSelectionAnchor(undefined);
+                setPendingSelection(undefined);
+                window.getSelection()?.removeAllRanges();
+              }}
+            />
+          )}
           {hasToc && tocFits && (
             <TableOfContents
               headings={viewerDocument.headings}
@@ -325,6 +434,11 @@ async function closeViewer() {
   await fetch("/__diffmap/shutdown", { method: "POST" });
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), Math.max(min, max));
+}
+
+const COMMENTS_PANEL_WIDTH = "minmax(0, 340px)";
 const DWELL_MS = 280;
 const DWELL_LEAVE_PAD_PX = 48;
 const TOC_DWELL_EDGE_PX = 48;
@@ -384,10 +498,18 @@ const styles = {
       "--diffmap-columns": "minmax(0, 1fr) minmax(0, 1fr)",
       "--diffmap-areas": '"article diff"',
     },
+    "&[data-has-comments='true']": {
+      "--diffmap-columns": `minmax(0, 1fr) ${COMMENTS_PANEL_WIDTH}`,
+      "--diffmap-areas": '"article comments"',
+    },
+    "&[data-has-source-diffs='true'][data-has-comments='true']": {
+      "--diffmap-columns": `minmax(0, 1fr) minmax(0, 1fr) ${COMMENTS_PANEL_WIDTH}`,
+      "--diffmap-areas": '"article diff comments"',
+    },
     "@media (max-width: 900px)": {
       gridTemplateColumns: "minmax(0, 1fr)",
-      gridTemplateRows: "minmax(0, 1fr) auto",
-      gridTemplateAreas: '"article" "diff"',
+      gridTemplateRows: "minmax(0, 1fr) auto auto",
+      gridTemplateAreas: '"article" "diff" "comments"',
     },
   }),
   article: style(spacing.padding({ x: 12, y: 12 }), {

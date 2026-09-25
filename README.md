@@ -18,6 +18,45 @@ npx @tanishqkancharla/diffmap share path/to.md
 
 Hosted viewer: `https://diffmap.dev/g/<gistId>` (optional `/<file.md>`; `#heading` is the table of contents). The page fetches the gist in the browser from `api.github.com`. Gists are unlisted, not private.
 
+## Comments (local only)
+
+The local viewer can annotate the document. Select anything in the page — a
+word, a triple-clicked paragraph, a whole section, a table cell, a call stack
+row — click **Comment**, and write a thread; threads support replies and an open/resolved status, and
+they live in a JSON sidecar next to the markdown file (`review.md` →
+`review.comments.json`), so they survive server restarts. The shared gist build
+has none of this.
+
+Comments are anchored to the block that contains the selection — its tag, its
+ordinal among blocks with that tag, and a hash of its text — plus the offset,
+length and quoted text inside it. Nothing is tied to a line number, so a
+regenerated document keeps its comments: on load each thread re-resolves to an
+exact match, to a relocated match, or is flagged **Stale anchor** and shown
+with the text it originally quoted. A selection that spans blocks stores both
+ends that way and is anchored only while both still resolve, in order.
+Selections in content that cannot be anchored, such as code excerpts, keep
+their quote but are marked **Not anchored**.
+
+The composer's primary button, **Ask** (also <kbd>Enter</kbd>), posts the
+comment and dispatches the thread to the coding agent that launched the viewer;
+its answer streams back into the thread without a reload. The chevron beside it
+posts the comment for later without asking. <kbd>Shift</kbd>+<kbd>Enter</kbd>
+adds a new line:
+
+```sh
+diffmap serve spec.md --agent-session <session-id>   # or DIFFMAP_AGENT_SESSION
+```
+
+The dispatch runs `claude --resume <session-id> --fork-session -p "<prompt>"`,
+so the answering run inherits the authoring context without colliding with the
+live interactive session. Without a session id the Ask AI button is disabled
+and says why.
+
+The routes live under the existing local API: `GET`/`POST
+/__diffmap/comments`, `POST /__diffmap/comments/:threadId/reply`, `POST
+/__diffmap/comments/:threadId/resolve`, and `GET /__diffmap/comments/stream`
+for Server-Sent Events.
+
 ## Agent skills
 
 ```sh

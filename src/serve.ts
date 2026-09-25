@@ -1,7 +1,14 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { createServer, type ViteDevServer } from "vite";
+import { createClaudeDispatcher } from "./comments/agent.js";
+import {
+  COMMENTS_ROUTE_PREFIX,
+  createCommentService,
+  type CommentService,
+} from "./comments/service.js";
 import { diffmapContentPlugin } from "./contentPlugin.js";
 import { DiffmapFileError, DiffmapServeError } from "./errors.js";
 import { extractTitle } from "./extractDocument.js";
@@ -15,6 +22,7 @@ import {
 export type DiffmapServer = {
   url: string;
   filePath: string;
+  commentsPath: string;
   shutdown: () => Promise<void>;
   closed: Promise<void>;
 };
@@ -23,6 +31,8 @@ export type StartServerInput = {
   filePath: string;
   workspaceRoot: string;
   port?: number;
+  /** Coding-agent session that Ask AI forks. Falls back to the environment. */
+  agentSessionId?: string;
 };
 
 const packageRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -60,6 +70,16 @@ export async function startServer(input: StartServerInput) {
   if (parsed instanceof Error) return parsed;
 
   const title = extractTitle(source);
+
+  const agentSessionId =
+    input.agentSessionId ?? process.env.DIFFMAP_AGENT_SESSION;
+  const comments = createCommentService({
+    filePath,
+    dispatcher: createClaudeDispatcher({
+      sessionId: agentSessionId,
+      cwd: workspaceRoot,
+    }),
+  });
 
   let vite: ViteDevServer | undefined;
   let registryPath: string | undefined;
@@ -121,6 +141,15 @@ export async function startServer(input: StartServerInput) {
             }
             if (url === undefined || !url.startsWith("/__diffmap")) {
               next();
+              return;
+            }
+            if (
+              pathname !== undefined &&
+              pathname.startsWith(COMMENTS_ROUTE_PREFIX)
+            ) {
+              inactivityTimer?.refresh();
+              // oxlint-disable-next-line typescript/no-floating-promises -- Connect middleware callbacks cannot await response handling.
+              void handleCommentsRequest({ comments, req, res });
               return;
             }
             // oxlint-disable-next-line typescript/no-floating-promises -- Connect middleware callbacks cannot await response handling.
@@ -186,9 +215,81 @@ export async function startServer(input: StartServerInput) {
   return {
     url,
     filePath,
+    commentsPath: comments.sidecarPath,
     shutdown,
     closed: closedBarrier.closed,
   };
+}
+
+const SSE_HEARTBEAT_MS = 25_000;
+
+async function handleCommentsRequest(input: {
+  comments: CommentService;
+  req: IncomingMessage;
+  res: ServerResponse;
+}) {
+  const { comments, req, res } = input;
+  const pathname = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
+  const method = req.method ?? "GET";
+  const body =
+    method === "GET" || method === "HEAD" ? "" : await readRequestBody(req);
+  const result = await comments.handle({ pathname, method, body });
+  if (result.kind === "pass") {
+    res.statusCode = 404;
+    res.end("not found");
+    return;
+  }
+  if (result.kind === "json") {
+    res.statusCode = result.status;
+    res.setHeader("content-type", "application/json; charset=utf-8");
+    res.end(JSON.stringify(result.body));
+    return;
+  }
+  streamComments({ comments, res });
+}
+
+/** Server-Sent Events, so an agent reply lands in open tabs without a reload. */
+function streamComments(input: {
+  comments: CommentService;
+  res: ServerResponse;
+}) {
+  const { comments, res } = input;
+  res.statusCode = 200;
+  res.setHeader("content-type", "text/event-stream; charset=utf-8");
+  res.setHeader("cache-control", "no-cache, no-transform");
+  res.setHeader("connection", "keep-alive");
+  res.flushHeaders();
+  const send = (event: string, data: unknown) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+  const unsubscribe = comments.subscribe((snapshot) => {
+    send("threads", snapshot);
+  });
+  const heartbeat = setInterval(
+    () => res.write(": ping\n\n"),
+    SSE_HEARTBEAT_MS,
+  );
+  heartbeat.unref();
+  res.on("close", () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  });
+  // oxlint-disable-next-line typescript/no-floating-promises -- The initial snapshot is pushed once the read settles.
+  void comments.snapshot().then((snapshot) => {
+    if (snapshot instanceof Error) {
+      send("error", { error: snapshot.message });
+      return;
+    }
+    send("threads", snapshot);
+  });
+}
+
+async function readRequestBody(req: IncomingMessage) {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 type DiffmapResponse = {

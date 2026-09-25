@@ -7,3 +7,13 @@ body,
 #root {
   min-height: 100vh;
 }
+
+/* Commented ranges. The Custom Highlight API leaves the prose DOM untouched;
+   browsers without it show no highlight and the sidebar still lists threads. */
+::highlight(diffmap-comment) {
+  background-color: oklch(0.92 0.12 95 / 0.55);
+}
+
+::highlight(diffmap-comment-active) {
+  background-color: oklch(0.88 0.16 95 / 0.8);
+}
