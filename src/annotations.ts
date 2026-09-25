@@ -19,10 +19,62 @@ export type SourceReference = DiffReference | FileReference;
 export type SourceAnnotation = {
   text: string;
   references: SourceReference[];
+  /** Collapsible notes under a call stack row, from `>` lines below it. */
+  details?: StackDetails;
 };
 
+export type StackExample = { kind: "in" | "out"; text: string };
+
+export type StackDetails = {
+  /** Description paragraphs; a bare `>` line starts a new one. */
+  paragraphs: string[];
+  /** `> in:` / `> out:` lines, in order, shown as an example. */
+  example: StackExample[];
+};
+
+/**
+ * `> text`, optionally after a diff sign and the tree's vertical guides so it
+ * can line up under its row.
+ */
+const detailLinePattern = /^[+-]?[ \t│┃]*>(?: (.*)|$)/u;
+const exampleLinePattern = /^(in|out):\s?(.*)$/;
+
 export function parseCallStack(source: string): SourceAnnotation[] {
-  return source.split("\n").map(parseAnnotation);
+  const rows: SourceAnnotation[] = [];
+  for (const line of source.split("\n")) {
+    const detail = detailLinePattern.exec(line);
+    const owner = rows.at(-1);
+    if (detail === null || owner === undefined) {
+      rows.push(parseAnnotation(line));
+      continue;
+    }
+    owner.details ??= { paragraphs: [], example: [] };
+    addDetail(owner.details, detail[1] ?? "");
+  }
+  return rows;
+}
+
+function addDetail(details: StackDetails, text: string) {
+  const example = exampleLinePattern.exec(text);
+  if (example !== null) {
+    details.example.push({
+      kind: example[1] === "in" ? "in" : "out",
+      text: example[2]!,
+    });
+    return;
+  }
+  const { paragraphs } = details;
+  if (text.trim() === "") {
+    if (paragraphs.at(-1) !== "") paragraphs.push("");
+    return;
+  }
+  const last = paragraphs.length - 1;
+  if (last < 0 || paragraphs[last] === "") {
+    if (last >= 0) paragraphs[last] = text;
+    else paragraphs.push(text);
+    return;
+  }
+  paragraphs[last] = `${paragraphs[last]} ${text}`;
 }
 
 export function parseAnnotation(line: string): SourceAnnotation {
