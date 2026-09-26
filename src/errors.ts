@@ -49,3 +49,8 @@ export class DiffmapAgentError extends errore.createTaggedError({
   name: "DiffmapAgentError",
   message: "diffmap agent failed: $reason",
 }) {}
+
+export class DiffmapQuizError extends errore.createTaggedError({
+  name: "DiffmapQuizError",
+  message: "diffmap quiz failed: $reason",
+}) {}

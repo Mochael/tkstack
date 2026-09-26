@@ -10,6 +10,12 @@ import {
   type CommentService,
 } from "./comments/service.js";
 import { diffmapContentPlugin } from "./contentPlugin.js";
+import { createQuizAgent } from "./quiz/agent.js";
+import {
+  QUIZ_ROUTE_PREFIX,
+  createQuizService,
+  type QuizService,
+} from "./quiz/service.js";
 import { DiffmapFileError, DiffmapServeError } from "./errors.js";
 import { extractTitle } from "./extractDocument.js";
 import { parseViewerDocument } from "./parseViewer.js";
@@ -23,6 +29,7 @@ export type DiffmapServer = {
   url: string;
   filePath: string;
   commentsPath: string;
+  quizPath: string;
   shutdown: () => Promise<void>;
   closed: Promise<void>;
 };
@@ -33,6 +40,10 @@ export type StartServerInput = {
   port?: number;
   /** Coding-agent session that Ask AI forks. Falls back to the environment. */
   agentSessionId?: string;
+  /** Pull request the quiz is written from. Falls back to the environment. */
+  quizPr?: string;
+  /** Model for the quiz author and grader (default: claude's default). */
+  quizModel?: string;
 };
 
 const packageRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -78,6 +89,16 @@ export async function startServer(input: StartServerInput) {
     dispatcher: createClaudeDispatcher({
       sessionId: agentSessionId,
       cwd: workspaceRoot,
+    }),
+  });
+
+  const quiz = createQuizService({
+    filePath,
+    agent: createQuizAgent({
+      source: input.quizPr ?? process.env.DIFFMAP_QUIZ_PR,
+      cwd: workspaceRoot,
+      documentPath: filePath,
+      ...(input.quizModel === undefined ? {} : { model: input.quizModel }),
     }),
   });
 
@@ -152,6 +173,15 @@ export async function startServer(input: StartServerInput) {
               void handleCommentsRequest({ comments, req, res });
               return;
             }
+            if (
+              pathname !== undefined &&
+              pathname.startsWith(QUIZ_ROUTE_PREFIX)
+            ) {
+              inactivityTimer?.refresh();
+              // oxlint-disable-next-line typescript/no-floating-promises -- Connect middleware callbacks cannot await response handling.
+              void handleQuizRequest({ quiz, req, res });
+              return;
+            }
             // oxlint-disable-next-line typescript/no-floating-promises -- Connect middleware callbacks cannot await response handling.
             void handleDiffmapRequest({
               url,
@@ -216,6 +246,7 @@ export async function startServer(input: StartServerInput) {
     url,
     filePath,
     commentsPath: comments.sidecarPath,
+    quizPath: quiz.sidecarPath,
     shutdown,
     closed: closedBarrier.closed,
   };
@@ -248,22 +279,62 @@ async function handleCommentsRequest(input: {
   streamComments({ comments, res });
 }
 
+async function handleQuizRequest(input: {
+  quiz: QuizService;
+  req: IncomingMessage;
+  res: ServerResponse;
+}) {
+  const { quiz, req, res } = input;
+  const pathname = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
+  const method = req.method ?? "GET";
+  const body =
+    method === "GET" || method === "HEAD" ? "" : await readRequestBody(req);
+  const result = await quiz.handle({ pathname, method, body });
+  if (result.kind === "pass") {
+    res.statusCode = 404;
+    res.end("not found");
+    return;
+  }
+  if (result.kind === "json") {
+    res.statusCode = result.status;
+    res.setHeader("content-type", "application/json; charset=utf-8");
+    res.end(JSON.stringify(result.body));
+    return;
+  }
+  streamSnapshots({ event: "quiz", service: quiz, res });
+}
+
 /** Server-Sent Events, so an agent reply lands in open tabs without a reload. */
 function streamComments(input: {
   comments: CommentService;
   res: ServerResponse;
 }) {
-  const { comments, res } = input;
+  streamSnapshots({
+    event: "threads",
+    service: input.comments,
+    res: input.res,
+  });
+}
+
+function streamSnapshots<T>(input: {
+  event: string;
+  service: {
+    subscribe: (listener: (snapshot: T) => void) => () => void;
+    snapshot: () => Promise<T | Error>;
+  };
+  res: ServerResponse;
+}) {
+  const { event, service, res } = input;
   res.statusCode = 200;
   res.setHeader("content-type", "text/event-stream; charset=utf-8");
   res.setHeader("cache-control", "no-cache, no-transform");
   res.setHeader("connection", "keep-alive");
   res.flushHeaders();
-  const send = (event: string, data: unknown) => {
-    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  const send = (name: string, data: unknown) => {
+    res.write(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
   };
-  const unsubscribe = comments.subscribe((snapshot) => {
-    send("threads", snapshot);
+  const unsubscribe = service.subscribe((snapshot) => {
+    send(event, snapshot);
   });
   const heartbeat = setInterval(
     () => res.write(": ping\n\n"),
@@ -275,12 +346,12 @@ function streamComments(input: {
     unsubscribe();
   });
   // oxlint-disable-next-line typescript/no-floating-promises -- The initial snapshot is pushed once the read settles.
-  void comments.snapshot().then((snapshot) => {
+  void service.snapshot().then((snapshot) => {
     if (snapshot instanceof Error) {
       send("error", { error: snapshot.message });
       return;
     }
-    send("threads", snapshot);
+    send(event, snapshot);
   });
 }
 
