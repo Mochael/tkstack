@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -39,6 +40,14 @@ import {
   type SelectionAnchor,
 } from "./comments/SelectionPopover.tsx";
 import { selectionTarget, useComments } from "./comments/useComments.js";
+import { QuizButton } from "./quiz/QuizButton.tsx";
+import {
+  QuizQuestionCard,
+  QuizSummary,
+  quizQuestionElementId,
+} from "./quiz/QuizInline.tsx";
+import { documentSections } from "../quiz/sections.js";
+import { useQuiz } from "./quiz/useQuiz.js";
 import { useMediaQuery } from "./useMediaQuery.ts";
 import { ViewerModeContext, type ViewerMode } from "./viewerMode.ts";
 
@@ -113,6 +122,52 @@ export function ViewerApp(props: {
     (entry) => entry.thread.status === "open",
   ).length;
   const commentsPanelOpen = commentsEnabled && commentsOpen;
+  const quiz = useQuiz({ enabled: commentsEnabled });
+  const quizRef = useRef<HTMLElement>(null);
+  // Unset until the reader acts: then a quiz already in progress shows.
+  const [quizOpen, setQuizOpen] = useState<boolean>();
+  const [quizScroll, setQuizScroll] = useState<{ target: string }>();
+  const quizShown = commentsEnabled && (quizOpen ?? quiz.answers.length > 0);
+  const quizReady =
+    quiz.generation?.state === "ready" && quiz.questions.length > 0;
+  // Questions in reading order: by the section they follow, then the rest.
+  const quizLayout = useMemo(() => {
+    const sectionIds = documentSections(viewerDocument).map(
+      (section) => section.id,
+    );
+    const known = new Set(sectionIds);
+    const bySection = new Map<string, typeof quiz.questions>();
+    const unplaced: typeof quiz.questions = [];
+    for (const question of quiz.questions) {
+      const id = question.sectionId;
+      if (id === undefined || !known.has(id)) {
+        unplaced.push(question);
+        continue;
+      }
+      bySection.set(id, [...(bySection.get(id) ?? []), question]);
+    }
+    const ordered = [
+      ...sectionIds.flatMap((id) => bySection.get(id) ?? []),
+      ...unplaced,
+    ];
+    return { bySection, unplaced, ordered };
+  }, [viewerDocument, quiz.questions]);
+  const quizCard = (question: (typeof quiz.questions)[number]) => (
+    <QuizQuestionCard
+      key={question.id}
+      quiz={quiz}
+      question={question}
+      index={quizLayout.ordered.indexOf(question)}
+      total={quizLayout.ordered.length}
+    />
+  );
+  const quizLabel = !quiz.status.available
+    ? "Quiz"
+    : quiz.generation?.state === "generating"
+      ? "Writing quiz…"
+      : quizReady && quiz.answers.length > 0
+        ? "Quiz"
+        : "Start quiz";
 
   const dismissFloatingToc = useCallback(() => {
     // Maui springs the panel closed only if Dismiss/Escape/scrim run while
@@ -142,9 +197,16 @@ export function ViewerApp(props: {
         domSelection.rangeCount === 0
           ? undefined
           : domSelection.getRangeAt(0);
+      // Selecting inside a quiz question (or typing an answer) is not a
+      // comment on the document.
+      const inQuiz =
+        isInQuiz(document.activeElement) ||
+        (range !== undefined &&
+          isInQuiz(nodeElement(range.commonAncestorContainer)));
       // Any selection that touches the prose counts, including select-all.
       const target =
         range === undefined ||
+        inQuiz ||
         contentEl === null ||
         !range.intersectsNode(contentEl)
           ? undefined
@@ -180,6 +242,15 @@ export function ViewerApp(props: {
   useEffect(() => {
     return () => window.clearTimeout(dwellTimer.current);
   }, []);
+
+  // Questions live in the document, so the code and the Diff panel stay in
+  // view while answering. The quiz button jumps to the next open question.
+  useEffect(() => {
+    if (quizScroll === undefined) return;
+    const target =
+      document.getElementById(quizScroll.target) ?? quizRef.current;
+    target?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [quizScroll]);
 
   useEffect(() => {
     const id = decodeURIComponent(window.location.hash.replace(/^#/, ""));
@@ -316,6 +387,36 @@ export function ViewerApp(props: {
               />
             )}
             {commentsEnabled && (
+              <QuizButton
+                label={quizLabel}
+                answered={quiz.answers.length}
+                total={quizReady ? quiz.questions.length : 0}
+                onClick={() => {
+                  setQuizOpen(true);
+                  const state = quiz.generation?.state;
+                  if (
+                    quiz.status.available &&
+                    (state === undefined || state === "error")
+                  ) {
+                    // oxlint-disable-next-line typescript/no-floating-promises -- Errors surface in the quiz summary through the hook.
+                    void quiz.generate(state === "error");
+                  }
+                  const next = quizLayout.ordered.find(
+                    (question) =>
+                      !quiz.answers.some(
+                        (answer) => answer.questionId === question.id,
+                      ),
+                  );
+                  setQuizScroll({
+                    target:
+                      quizReady && next !== undefined
+                        ? quizQuestionElementId(next.id)
+                        : "diffmap-quiz",
+                  });
+                }}
+              />
+            )}
+            {commentsEnabled && (
               <CommentsButton
                 pressed={commentsPanelOpen}
                 openCount={openComments}
@@ -366,6 +467,12 @@ export function ViewerApp(props: {
                 >
                   <ComarkView
                     document={viewerDocument}
+                    afterSection={
+                      quizShown && quizReady
+                        ? (sectionId) =>
+                            quizLayout.bySection.get(sectionId)?.map(quizCard)
+                        : undefined
+                    }
                     selectedAnnotation={selection?.annotation}
                     onSelectAnnotation={(line) => {
                       setShowDiffPanel(true);
@@ -376,6 +483,14 @@ export function ViewerApp(props: {
                     }}
                   />
                 </div>
+                {quizShown && (
+                  <QuizSummary
+                    ref={quizRef}
+                    quiz={quiz}
+                    unplaced={quizLayout.unplaced.map(quizCard)}
+                    onClose={() => setQuizOpen(false)}
+                  />
+                )}
               </div>
             </article>
             {diffPanelOpen && (
@@ -440,6 +555,14 @@ function useViewerMeta(enabled: boolean) {
 
 async function closeViewer() {
   await fetch("/__diffmap/shutdown", { method: "POST" });
+}
+
+function isInQuiz(element: Element | null | undefined) {
+  return (element?.closest("[data-diffmap-quiz]") ?? undefined) !== undefined;
+}
+
+function nodeElement(node: Node) {
+  return node instanceof Element ? node : node.parentElement;
 }
 
 function clamp(value: number, min: number, max: number) {

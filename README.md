@@ -57,6 +57,54 @@ The routes live under the existing local API: `GET`/`POST
 /__diffmap/comments/:threadId/resolve`, and `GET /__diffmap/comments/stream`
 for Server-Sent Events.
 
+## Reader quiz (local only)
+
+A walkthrough is only useful if the reader comes away understanding the
+change. The quiz measures that. Point the viewer at the pull request the
+document explains:
+
+```sh
+diffmap serve review.md --quiz-pr 283        # or a PR URL; env: DIFFMAP_QUIZ_PR
+```
+
+**Start quiz** in the header starts the quiz. The first time, a separate model
+writes it. That model is a fresh headless `claude -p` session,
+not the agent that wrote the document. It reads the pull request itself
+(`gh pr view`, `gh pr diff`, and the repository at the head commit) and is
+denied read access to the document and its sidecars, so the quiz cannot be
+written to match the document. Walkthrough links and bot summaries are
+stripped from the PR description before the model sees it.
+
+The author gets guidance, not a template. It covers the problems the change
+fixes, how the solution works, edge cases, what is and isn't tested, and real
+risks. It is asked for as few questions as cover the whole change with none
+redundant, so a small PR may get one or two questions and a large one up to
+about eight. It favors questions that make the reader apply what they know
+over questions answered by recall.
+
+The questions then appear inside the document, each one at the end of the
+section it asks about, so the Diff panel and code stay in view while you answer.
+A second run picks those positions. It is the only run that reads the document,
+and it sees each question's prompt but never its answer or rubric. It only
+chooses where a question goes, so it cannot tilt the quiz toward the document.
+A question with no matching section, or whose section disappeared in a rewrite,
+goes to the quiz summary at the end of the document. **Re-place questions** in
+the summary's menu runs placement again after the document changes. After that,
+the quiz button jumps to the next unanswered question.
+
+Each answer is graded as soon as it is submitted. The grader forks the author's
+session, so it keeps what the author learned about the code, and scores the
+answer 0, 1 or 2 with a short explanation. The grade stays folded until the
+reader opens it, one question at a time, or all at once with **Reveal all
+results** in the summary when every question is graded. The rubric and reference answers never
+reach the page. They live with the answers in a sidecar (`review.md` →
+`review.quiz.json`). `--quiz-model` picks the model for the author and grader.
+
+The routes are `GET /__diffmap/quiz`, `POST /__diffmap/quiz/generate`
+(`{regenerate?}`), `POST /__diffmap/quiz/answers` (`{questionId, answer}`),
+`POST /__diffmap/quiz/place` (re-place), `POST /__diffmap/quiz/reset` (retake),
+and `GET /__diffmap/quiz/stream`.
+
 ## Agent skills
 
 ```sh
