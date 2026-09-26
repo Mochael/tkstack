@@ -82,13 +82,18 @@ export async function startServer(input: StartServerInput) {
 
   const title = extractTitle(source);
 
+  // Claude Code sets CLAUDE_CODE_SESSION_ID for the commands it runs, so a
+  // viewer an agent launches answers from that agent's session by default.
   const agentSessionId =
-    input.agentSessionId ?? process.env.DIFFMAP_AGENT_SESSION;
+    input.agentSessionId ??
+    process.env.DIFFMAP_AGENT_SESSION ??
+    process.env.CLAUDE_CODE_SESSION_ID;
   const comments = createCommentService({
     filePath,
     dispatcher: createClaudeDispatcher({
       sessionId: agentSessionId,
       cwd: workspaceRoot,
+      documentPath: filePath,
     }),
   });
 

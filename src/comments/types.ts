@@ -82,6 +82,11 @@ export type CommentStore = {
 export type CommentAgentStatus = {
   available: boolean;
   reason: string | undefined;
+  /**
+   * `session`: a fork of the session that wrote the document answers.
+   * `fresh`: a new read-only session answers from the document and code.
+   */
+  mode?: "session" | "fresh";
 };
 
 export type CommentsSnapshot = {
