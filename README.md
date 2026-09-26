@@ -38,19 +38,26 @@ Selections in content that cannot be anchored, such as code excerpts, keep
 their quote but are marked **Not anchored**.
 
 The composer's primary button, **Ask** (also <kbd>Enter</kbd>), posts the
-comment and dispatches the thread to the coding agent that launched the viewer;
-its answer streams back into the thread without a reload. The chevron beside it
-posts the comment for later without asking. <kbd>Shift</kbd>+<kbd>Enter</kbd>
-adds a new line:
+comment and asks Claude about it; the answer streams back into the thread
+without a reload. The chevron beside it posts the comment for later without
+asking. <kbd>Shift</kbd>+<kbd>Enter</kbd> adds a new line.
+
+Ask AI needs no setup. When a coding agent launches the viewer, the answer comes
+from that agent's session, which already knows how the document was written.
+Claude Code sets `CLAUDE_CODE_SESSION_ID` for the commands it runs, and diffmap
+picks it up. To point at a different session:
 
 ```sh
 diffmap serve spec.md --agent-session <session-id>   # or DIFFMAP_AGENT_SESSION
 ```
 
-The dispatch runs `claude --resume <session-id> --fork-session -p "<prompt>"`,
-so the answering run inherits the authoring context without colliding with the
-live interactive session. Without a session id the Ask AI button is disabled
-and says why.
+The dispatch runs `claude --resume <session-id> --fork-session -p "<prompt>"`
+from the session's own project directory, which it reads from the session
+transcript under `~/.claude/projects`. The fork inherits the authoring context
+without colliding with the live interactive session. With no session, or one
+that can't be found or resumed, a fresh read-only `claude -p` session answers
+instead. It is told where the document is and may read it, the workspace, and
+git history.
 
 The routes live under the existing local API: `GET`/`POST
 /__diffmap/comments`, `POST /__diffmap/comments/:threadId/reply`, `POST

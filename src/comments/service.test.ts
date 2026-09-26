@@ -41,6 +41,9 @@ async function harness(
     dispatcher: createClaudeDispatcher({
       sessionId: "session" in options ? options.session : "session-1",
       cwd: dir,
+      documentPath: filePath,
+      locate: async (sessionId) =>
+        await Promise.resolve({ sessionId, cwd: dir }),
       ...(options.run === undefined ? {} : { run: options.run }),
     }),
     now: () => new Date(Date.UTC(2026, 0, 1, 0, 0, (clock += 1))),
@@ -362,19 +365,23 @@ test("a failed agent run stores an error state instead of hanging", async () => 
   assert.equal(snapshot.threads[0]?.messages.length, 1);
 });
 
-test("without a session the snapshot reports Ask AI as unavailable", async () => {
+test("without a session Ask AI stays available and answers fresh", async () => {
   const { service } = await harness({ session: undefined });
   const snapshot = await service.snapshot();
   if (snapshot instanceof Error) throw snapshot;
-  assert.equal(snapshot.agent.available, false);
-  assert.match(snapshot.agent.reason ?? "", /DIFFMAP_AGENT_SESSION/);
+  assert.equal(snapshot.agent.available, true);
+  assert.equal(snapshot.agent.mode, "fresh");
 });
 
 test("threads survive a restart of the service", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "diffmap-restart-"));
   const filePath = path.join(dir, "review.md");
   await fs.writeFile(filePath, markdown, "utf8");
-  const dispatcher = createClaudeDispatcher({ sessionId: "s", cwd: dir });
+  const dispatcher = createClaudeDispatcher({
+    sessionId: "s",
+    cwd: dir,
+    documentPath: filePath,
+  });
   const first = createCommentService({ filePath, dispatcher });
   await post(first, "/__diffmap/comments", {
     target: textTarget,

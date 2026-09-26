@@ -117,8 +117,10 @@ export function CommentComposer(props: {
           {canAsk
             ? props.busy === true
               ? "The agent is answering…"
-              : undefined
-            : "Ask AI is off: start diffmap with --agent-session"}
+              : props.agent.mode === "fresh"
+                ? "A fresh Claude session answers from the document and code."
+                : undefined
+            : (props.agent.reason ?? "Ask AI is unavailable.")}
         </span>
         <div className={split} data-single={!canAsk}>
           <Button
