@@ -1,4 +1,10 @@
-import { createElement, type ReactNode, useState } from "react";
+import {
+  createElement,
+  Fragment,
+  type ReactNode,
+  useMemo,
+  useState,
+} from "react";
 import {
   Checkbox,
   colors,
@@ -20,6 +26,7 @@ import type {
   ViewerNode,
 } from "../parseViewer.js";
 import type { SourceNavigation } from "../annotations.js";
+import { documentSections } from "../quiz/sections.js";
 import { Fence } from "./Fence.tsx";
 import { HtmlPlaceholder } from "./HtmlPlaceholder.tsx";
 import { useViewerMode } from "./viewerMode.ts";
@@ -27,14 +34,39 @@ import { useViewerMode } from "./viewerMode.ts";
 const voidTags = new Set(["img", "hr", "br"]);
 
 export function ComarkView(
-  props: { document: ViewerDocument } & SourceNavigation,
+  props: {
+    document: ViewerDocument;
+    /** Rendered at the end of each top-level section, e.g. quiz questions. */
+    afterSection?: (sectionId: string) => ReactNode;
+  } & SourceNavigation,
 ) {
   const trustedHtml = useViewerMode() === "local";
+  // Node index -> sections ending there, innermost first.
+  const endings = useMemo(() => {
+    const map = new Map<number, string[]>();
+    for (const section of documentSections(props.document).toReversed()) {
+      map.set(section.end, [...(map.get(section.end) ?? []), section.id]);
+    }
+    return map;
+  }, [props.document]);
+  const afterSection = props.afterSection;
+  const slots = (index: number) =>
+    afterSection === undefined
+      ? undefined
+      : endings
+          .get(index)
+          ?.map((id) => (
+            <Fragment key={`after-${id}`}>{afterSection(id)}</Fragment>
+          ));
   return (
     <>
-      {props.document.nodes.map((node, index) =>
-        renderNode(node, index, props, trustedHtml),
-      )}
+      {props.document.nodes.map((node, index) => (
+        <Fragment key={index}>
+          {slots(index)}
+          {renderNode(node, index, props, trustedHtml)}
+        </Fragment>
+      ))}
+      {slots(props.document.nodes.length)}
     </>
   );
 }

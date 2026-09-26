@@ -43,6 +43,8 @@ export function collectDomBlocks(container: HTMLElement): DomBlock[] {
     );
     if (outerView !== null && outerView !== undefined) continue;
     if (!view && element.closest("pre, code") !== null) continue;
+    // Quiz questions render inside the prose but are not part of it.
+    if (element.closest("[data-diffmap-quiz]") !== null) continue;
     const read = readBlockText(element);
     if (read.text === "") continue;
     const tag = view
