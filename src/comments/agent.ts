@@ -87,7 +87,7 @@ export function createClaudeDispatcher(input: {
   run?: RunAgentCommand;
 }): AgentDispatcher {
   const sessionId = input.sessionId;
-  const run = input.run ?? runWithExecFile;
+  const run = input.run ?? runAgentCommand;
   const timeoutMs = input.timeoutMs ?? AGENT_TIMEOUT_MS;
   const status: CommentAgentStatus =
     sessionId === undefined || sessionId === ""
@@ -139,7 +139,8 @@ export function createClaudeDispatcher(input: {
   };
 }
 
-const runWithExecFile: RunAgentCommand = (input) =>
+/** Runs an agent CLI with `execFile`; shared with the quiz. */
+export const runAgentCommand: RunAgentCommand = (input) =>
   new Promise<AgentRunOutput | Error>((resolve) => {
     const child = execFile(
       input.executable,

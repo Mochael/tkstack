@@ -20,6 +20,16 @@ const serveOptions = z.object({
     .describe(
       "Coding-agent session id that Ask AI forks (env: DIFFMAP_AGENT_SESSION)",
     ),
+  quizPr: z
+    .string()
+    .optional()
+    .describe(
+      "Pull request (number or URL) to write the reader quiz from (env: DIFFMAP_QUIZ_PR)",
+    ),
+  quizModel: z
+    .string()
+    .optional()
+    .describe("Model that writes and grades the quiz"),
 });
 
 const serveOutput = z.object({
@@ -33,6 +43,8 @@ type ServeContext = {
     port?: number | undefined;
     root?: string | undefined;
     agentSession?: string | undefined;
+    quizPr?: string | undefined;
+    quizModel?: string | undefined;
   };
   error: (input: { code: string; message: string }) => never;
 };
@@ -46,6 +58,8 @@ async function* runServe(c: ServeContext) {
         : resolveFromInvokeCwd(c.options.root),
     port: c.options.port,
     agentSessionId: c.options.agentSession,
+    quizPr: c.options.quizPr,
+    quizModel: c.options.quizModel,
   });
   if (started instanceof Error) {
     return c.error({
