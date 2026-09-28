@@ -11,6 +11,7 @@ export type ViewerDocument = {
   headings: ViewerHeading[];
   sourceDiffs: CodeViewDiffItem[];
   hasReferences: boolean;
+  codeFirst: boolean;
 };
 
 export type ViewerHeading = {
@@ -69,6 +70,8 @@ export function parseViewerDocument(source: string, path = "spec") {
   for (const fence of fences) {
     if (fence.kind === "flow-examples" && fence.flow instanceof Error)
       return new DiffmapAnnotationError({ reason: fence.flow.message });
+    if (fence.kind === "review-diff" && fence.review instanceof Error)
+      return new DiffmapAnnotationError({ reason: fence.review.message });
   }
   const sourceDiffs: CodeViewDiffItem[] = [];
   for (const fence of fences) {
@@ -193,6 +196,7 @@ export function parseViewerDocument(source: string, path = "spec") {
     hasReferences: annotations.some(
       (annotation) => annotation.references.length > 0,
     ),
+    codeFirst: fences.some((fence) => fence.kind === "review-diff"),
   };
 }
 

@@ -8,6 +8,7 @@ import { FlowExamplesView } from "./FlowExamplesView.tsx";
 import { HtmlBlock } from "./HtmlBlock.tsx";
 import { HtmlPlaceholder } from "./HtmlPlaceholder.tsx";
 import { MermaidBlock } from "./MermaidBlock.tsx";
+import { ReviewDiff } from "./ReviewDiff.tsx";
 import { useViewerMode } from "./viewerMode.ts";
 
 export function Fence(props: { fence: FenceModel } & SourceNavigation) {
@@ -27,6 +28,12 @@ export function Fence(props: { fence: FenceModel } & SourceNavigation) {
     return <HtmlBlock source={fence.source} />;
   }
   if (fence.kind === "source-diff") return undefined;
+  if (fence.kind === "review-diff")
+    return fence.review instanceof Error ? (
+      <CodeBlock lang="text">{fence.review.message}</CodeBlock>
+    ) : (
+      <ReviewDiff path={fence.path} review={fence.review} />
+    );
   if (fence.kind === "flow-examples")
     return fence.flow instanceof Error ? (
       <CodeBlock lang="text">{fence.flow.message}</CodeBlock>

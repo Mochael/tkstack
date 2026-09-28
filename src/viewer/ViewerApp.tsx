@@ -72,9 +72,19 @@ export function ViewerApp(props: {
   const heading = useStyles(styles.heading);
   const titleClass = useStyles(styles.title);
   const actions = useStyles(styles.actions);
-  const article = useStyles(styles.article);
-  const prose = useStyles(styles.prose);
-  const content = useStyles(proseHtml("md"), styles.content);
+  const article = useStyles(
+    styles.article,
+    viewerDocument.codeFirst ? styles.codeArticle : undefined,
+  );
+  const prose = useStyles(
+    styles.prose,
+    viewerDocument.codeFirst ? styles.codeProse : undefined,
+  );
+  const content = useStyles(
+    proseHtml("md"),
+    styles.content,
+    viewerDocument.codeFirst ? styles.codeContent : undefined,
+  );
   const closed = useStyles(styles.closed);
   const closedCopy = useStyles(styles.closedCopy);
   const stage = useStyles(styles.stage);
@@ -86,7 +96,7 @@ export function ViewerApp(props: {
   const tocFits = useMediaQuery(
     `(min-width: ${String(TOC_OVERLAY_MIN_WIDTH_PX)}px)`,
   );
-  const [overlayOpen, setOverlayOpen] = useState(true);
+  const [overlayOpen, setOverlayOpen] = useState(!viewerDocument.codeFirst);
   const [floating, setFloating] = useState<"click" | "dwell">();
   const tocExpanded = tocFits ? overlayOpen : floating !== undefined;
   const suppressTocReopen = useRef(false);
@@ -415,6 +425,7 @@ export function ViewerApp(props: {
               articleRef={articleRef}
               layout="overlay"
               collapsed={!overlayOpen}
+              codeFirst={viewerDocument.codeFirst}
             />
           )}
         </div>
@@ -528,6 +539,7 @@ const styles = {
     overflowY: "auto",
     backgroundColor: backgroundColor.app,
   }),
+  codeArticle: style({ padding: "28px max(24px, 3vw) 72px" }),
   prose: style({
     display: "grid",
     gridTemplateColumns: `minmax(0, 1fr) minmax(0, ${proseMaxWidth}) minmax(0, 1fr)`,
@@ -535,6 +547,7 @@ const styles = {
     maxWidth: "none",
     minWidth: 0,
   }),
+  codeProse: style({ gridTemplateColumns: "minmax(0, 1fr)" }),
   content: style({
     gridColumn: "2 / 3",
     width: "100%",
@@ -564,6 +577,12 @@ const styles = {
       whiteSpace: "nowrap",
       border: 0,
     },
+  }),
+  codeContent: style({
+    gridColumn: "1",
+    "& h1, & h2": { maxWidth: "900px" },
+    "& p": { maxWidth: "900px" },
+    "& [data-diffmap-kind='review-diff']": { margin: "12px 0 36px" },
   }),
   closed: style(
     flex({
