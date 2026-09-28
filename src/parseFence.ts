@@ -3,11 +3,13 @@ import {
   parseDiagramAnnotations,
   type DiagramAnnotation,
 } from "./diagramAnnotations.js";
+import { parseFlowExamples, type FlowExamples } from "./flowExamples.js";
 
 export type Fence =
   | { kind: "mermaid"; source: string; annotations: DiagramAnnotation[] }
   | { kind: "html"; source: string }
   | { kind: "callstack"; source: string; lines: SourceAnnotation[] }
+  | { kind: "flow-examples"; source: string; flow: FlowExamples | Error }
   | { kind: "source-diff"; id: string; path: string; source: string }
   | { kind: "file"; path: string; start: number; end: number; source: string }
   | { kind: "diff"; path: string | undefined; source: string }
@@ -39,6 +41,12 @@ export function parseFence(lang: string, source: string): Fence {
       annotations: parseDiagramAnnotations(trimmed),
     };
   if (lang === "html") return { kind: "html", source: trimmed };
+  if (lang === "flow-examples")
+    return {
+      kind: "flow-examples",
+      source: trimmed,
+      flow: parseFlowExamples(trimmed),
+    };
   if (lang === "callstack")
     return {
       kind: "callstack",

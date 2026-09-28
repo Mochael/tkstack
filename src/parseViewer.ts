@@ -66,6 +66,10 @@ export function parseViewerDocument(source: string, path = "spec") {
   if (tree instanceof Error) return tree;
   const nodes = tree.nodes.flatMap(fromNode);
   const fences = collectFences(nodes);
+  for (const fence of fences) {
+    if (fence.kind === "flow-examples" && fence.flow instanceof Error)
+      return new DiffmapAnnotationError({ reason: fence.flow.message });
+  }
   const sourceDiffs: CodeViewDiffItem[] = [];
   for (const fence of fences) {
     if (fence.kind !== "source-diff") continue;
@@ -105,6 +109,10 @@ export function parseViewerDocument(source: string, path = "spec") {
     if (fence.kind === "callstack") return fence.lines;
     if (fence.kind === "mermaid")
       return fence.annotations.map((link) => link.annotation);
+    if (fence.kind === "flow-examples" && !(fence.flow instanceof Error))
+      return fence.flow.nodes.flatMap((node) =>
+        node.source === undefined ? [] : [node.source],
+      );
     return [];
   });
   const mermaidFences = fences.flatMap((fence) =>

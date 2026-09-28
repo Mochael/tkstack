@@ -26,6 +26,8 @@ export function Fence(props: { fence: FenceModel } & SourceNavigation) {
     return <HtmlBlock source={fence.source} />;
   }
   if (fence.kind === "source-diff") return undefined;
+  if (fence.kind === "flow-examples")
+    return <CodeBlock lang="json">{fence.source}</CodeBlock>;
   if (fence.kind === "callstack")
     return (
       <CallStackDiff
