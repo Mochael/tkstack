@@ -74,6 +74,43 @@ test("parseViewerDocument accepts a spec with valid mermaid", async () => {
   );
 });
 
+test("review diff keeps a split patch and checks note locations", () => {
+  const patch = `diff --git a/src/example.ts b/src/example.ts
+--- a/src/example.ts
++++ b/src/example.ts
+@@ -1 +1 @@
+-const value = 1
++const value = 2`;
+  const source = `# Review\n\n\`\`\`review-diff:src/example.ts\n@old:1\tOld behavior\n@new:1\tNew behavior\n--- PATCH ---\n${patch}\n\`\`\``;
+  const parsed = parseViewerDocument(source);
+  assert.equal(parsed instanceof Error, false);
+  if (parsed instanceof Error) return;
+  assert.equal(parsed.codeFirst, true);
+  const view = parsed.nodes.find((node) => node.type === "view");
+  assert.equal(
+    view?.type === "view" && view.fence.kind === "review-diff",
+    true,
+  );
+  if (
+    view?.type !== "view" ||
+    view.fence.kind !== "review-diff" ||
+    view.fence.review instanceof Error
+  )
+    return;
+  assert.deepEqual(
+    view.fence.review.notes.map(({ side, lineNumber }) => [side, lineNumber]),
+    [
+      ["deletions", 1],
+      ["additions", 1],
+    ],
+  );
+  const invalid = parseViewerDocument(source.replace("@new:1", "@new:9"));
+  assert.match(
+    invalid instanceof Error ? invalid.message : "",
+    /outside src\/example\.ts/,
+  );
+});
+
 test("parseViewerDocument fails on broken mermaid with file and diagram", () => {
   const source = brokenMermaidSpec();
   const parsed = parseViewerDocument(source, "broken.md");

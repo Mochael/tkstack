@@ -4,6 +4,7 @@ import {
   type DiagramAnnotation,
 } from "./diagramAnnotations.js";
 import { parseFlowExamples, type FlowExamples } from "./flowExamples.js";
+import { parseReviewDiff, type ReviewDiff } from "./reviewDiff.js";
 
 export type Fence =
   | { kind: "mermaid"; source: string; annotations: DiagramAnnotation[] }
@@ -11,6 +12,7 @@ export type Fence =
   | { kind: "callstack"; source: string; lines: SourceAnnotation[] }
   | { kind: "flow-examples"; source: string; flow: FlowExamples | Error }
   | { kind: "source-diff"; id: string; path: string; source: string }
+  | { kind: "review-diff"; path: string; review: ReviewDiff | Error }
   | { kind: "file"; path: string; start: number; end: number; source: string }
   | { kind: "diff"; path: string | undefined; source: string }
   | { kind: "code"; lang: string; source: string };
@@ -52,6 +54,14 @@ export function parseFence(lang: string, source: string): Fence {
       kind: "callstack",
       source: trimmed,
       lines: parseCallStack(trimmed),
+    };
+
+  const reviewDiff = /^review-diff:(.+)$/.exec(lang);
+  if (reviewDiff !== null)
+    return {
+      kind: "review-diff",
+      path: reviewDiff[1]!,
+      review: parseReviewDiff(trimmed, reviewDiff[1]!),
     };
 
   const sourceDiff = /^source-diff:([\w-]+):(.+)$/.exec(lang);

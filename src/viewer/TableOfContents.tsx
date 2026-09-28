@@ -1,5 +1,12 @@
 import { useEffect, useState, type RefObject } from "react";
-import { colors, focusRing, radius, spacing, text } from "maui";
+import {
+  backgroundColor,
+  colors,
+  focusRing,
+  radius,
+  spacing,
+  text,
+} from "maui";
 import { style, useStyles } from "purse-styles";
 import type { ViewerHeading } from "../parseViewer.js";
 
@@ -18,6 +25,7 @@ export function TableOfContents(props: {
   layout: "overlay" | "panel";
   collapsed?: boolean;
   onNavigate?: () => void;
+  codeFirst?: boolean;
 }) {
   const items = nestHeadings(tocHeadings(props.headings));
   const { activeId, setActiveId } = useActiveHeading(
@@ -26,6 +34,9 @@ export function TableOfContents(props: {
   );
   const navClass = useStyles(
     props.layout === "panel" ? styles.panel : styles.overlay,
+    props.layout === "overlay" && props.codeFirst
+      ? styles.codeOverlay
+      : undefined,
   );
   const listClass = useStyles(styles.list);
   if (items.length === 0) return undefined;
@@ -211,6 +222,12 @@ const styles = {
       pointerEvents: "none",
     },
     ...tocListRules,
+  }),
+  codeOverlay: style({
+    backgroundColor: backgroundColor.app,
+    boxShadow: "0 4px 24px rgba(0, 0, 0, 0.16)",
+    borderRadius: 8,
+    marginInlineStart: 8,
   }),
   panel: style(spacing.padding({ left: 4, right: 4, top: 8, bottom: 8 }), {
     boxSizing: "border-box",
