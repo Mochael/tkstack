@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { parseFlowExamples } from "./flowExamples.js";
 import { parseViewerDocument } from "./parseViewer.js";
@@ -65,4 +67,27 @@ test("invalid flow examples fail document parsing", () => {
   );
   assert.equal(result instanceof Error, true);
   assert.match(String(result), /Invalid flow-examples JSON/);
+});
+
+test("Tandem demo parses as a two-path document", async () => {
+  const path = fileURLToPath(
+    new URL("../fixtures/deterministic-simulation-flow.md", import.meta.url),
+  );
+  const source = await fs.readFile(path, "utf8");
+  const document = parseViewerDocument(source, path);
+  assert.equal(document instanceof Error, false, String(document));
+  if (document instanceof Error) return;
+  const view = document.nodes.find(
+    (node) => node.type === "view" && node.fence.kind === "flow-examples",
+  );
+  assert.equal(view?.type, "view");
+  if (
+    view?.type !== "view" ||
+    view.fence.kind !== "flow-examples" ||
+    view.fence.flow instanceof Error
+  )
+    return;
+  assert.equal(view.fence.flow.cases.length, 2);
+  assert.equal(view.fence.flow.cases[0]?.steps.at(-1)?.node, "model");
+  assert.equal(document.hasReferences, true);
 });

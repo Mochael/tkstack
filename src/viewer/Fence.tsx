@@ -4,6 +4,7 @@ import type { SourceNavigation } from "../annotations.js";
 import { CallStackDiff } from "./CallStackDiff.tsx";
 import { CodeDiff } from "./CodeDiff.tsx";
 import { FileExcerpt } from "./FileExcerpt.tsx";
+import { FlowExamplesView } from "./FlowExamplesView.tsx";
 import { HtmlBlock } from "./HtmlBlock.tsx";
 import { HtmlPlaceholder } from "./HtmlPlaceholder.tsx";
 import { MermaidBlock } from "./MermaidBlock.tsx";
@@ -27,7 +28,11 @@ export function Fence(props: { fence: FenceModel } & SourceNavigation) {
   }
   if (fence.kind === "source-diff") return undefined;
   if (fence.kind === "flow-examples")
-    return <CodeBlock lang="json">{fence.source}</CodeBlock>;
+    return fence.flow instanceof Error ? (
+      <CodeBlock lang="text">{fence.flow.message}</CodeBlock>
+    ) : (
+      <FlowExamplesView flow={fence.flow} {...props} />
+    );
   if (fence.kind === "callstack")
     return (
       <CallStackDiff

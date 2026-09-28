@@ -68,6 +68,6 @@ Show a case picker, function graph, current transition, and playback controls. N
     └── open node source → SourceDiffPanel [[src/viewer/SourceDiffPanel.tsx#SourceDiffPanel]]
 ```
 
-- [ ] Build the viewer and responsive layout.
-- [ ] Add a Tandem simulation example with distinct successful and fault paths.
-- [ ] Verify build and inspect the UI in a browser.
+- [x] Build the viewer and responsive layout.
+- [x] Add a Tandem simulation example with two recorded failure paths that branch at the network fault.
+- [x] Verify the build and inspect case switching, step navigation, and full code in a browser.
