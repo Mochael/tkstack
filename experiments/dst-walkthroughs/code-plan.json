@@ -1,0 +1,206 @@
+{
+  "title": "How DST schedules and checks a run — code review",
+  "sections": [
+    {
+      "heading": "1. How can the simulator see stopped calls?",
+      "commit": "f7fc758",
+      "file": "packages/gatekeeper/src/Gatekeeper.ts",
+      "hunks": [
+        "export type PendingCall",
+        "pendingCalls(): readonly PendingCall[]",
+        "private pendingCalls(): readonly PendingCall[]",
+        "pendingCall(): PendingCall | undefined"
+      ],
+      "notes": [
+        {
+          "side": "new",
+          "anchor": "readonly waitingFor: string",
+          "text": "The simulator needs both ends of a handoff to know what it can advance or drop."
+        },
+        {
+          "side": "new",
+          "anchor": "\t\tpendingCalls(): readonly PendingCall[]",
+          "text": "The harness exposes a snapshot of calls currently held by a gate."
+        },
+        {
+          "side": "new",
+          "anchor": "return [...this.calls].flatMap",
+          "text": "Each call contributes at most one current stop. The scheduler never receives stale stops."
+        },
+        {
+          "side": "new",
+          "anchor": "if (this.outcome || this.controlError || this.controlling)",
+          "text": "Finished calls and calls already being controlled are excluded; every returned call is actionable."
+        }
+      ]
+    },
+    {
+      "heading": "2. How does one step leave other work in flight?",
+      "commit": "c72e5b7",
+      "file": "dst/DstSimulation.ts",
+      "hunks": ["const pending = gatekeeper.pendingCalls()"],
+      "notes": [
+        {
+          "side": "old",
+          "anchor": "await commit.continueToCompletion()",
+          "text": "Before: one commit ran to completion within the step, so another write could not overlap it."
+        },
+        {
+          "side": "new",
+          "anchor": "inFlight.push(client.commit(tx))",
+          "text": "Now a write starts and stays in flight. A later step may start another write or advance this one."
+        },
+        {
+          "side": "new",
+          "anchor": "const pending = gatekeeper.pendingCalls()",
+          "text": "At each step, the simulator refreshes the list of calls it can act on."
+        },
+        {
+          "side": "new",
+          "anchor": "pending.length < maxCallsInFlight",
+          "text": "The cap still allows a second mutation while the first call is paused."
+        },
+        {
+          "side": "new",
+          "anchor": "target.handle.continueTo(target.waitingFor)",
+          "text": "Advance releases just this call's current gate; the backend alone does not choose the whole interleaving."
+        }
+      ]
+    },
+    {
+      "heading": "3. What does an enabled event do to the test world?",
+      "commit": "69a2a3a",
+      "file": "dst/DstWorld.ts",
+      "range": { "start": 341, "end": 399 },
+      "notes": [
+        {
+          "side": "new",
+          "anchor": ".pendingCalls()",
+          "text": "The world gives each stopped call a stable name for the saved trace and replay."
+        },
+        {
+          "side": "new",
+          "anchor": "return this.write(step, intent)",
+          "text": "A set or remove begins a local client write."
+        },
+        {
+          "side": "new",
+          "anchor": "target.handle.continueTo(target.waitingFor)",
+          "text": "Advance releases one handoff. The promise remains in flight if it later stops again."
+        },
+        {
+          "side": "new",
+          "anchor": "target.handle.fail(new DstFaultError",
+          "text": "Drop fails that exact handoff, simulating a lost network message."
+        },
+        {
+          "side": "new",
+          "anchor": "await this.harness.restart(intent.client)",
+          "text": "Restart creates a new client incarnation over its durable storage."
+        },
+        {
+          "side": "new",
+          "anchor": "return this.checkClients(step)",
+          "text": "After each event settles, compare observed state with an independent model."
+        }
+      ]
+    },
+    {
+      "heading": "4. What state should the clients and server have?",
+      "commit": "69a2a3a",
+      "file": "dst/ReferenceModel.ts",
+      "range": { "start": 31, "end": 100 },
+      "notes": [
+        {
+          "side": "new",
+          "anchor": "private readonly server =",
+          "text": "The model tracks server state independently from Tandem's implementation."
+        },
+        {
+          "side": "new",
+          "anchor": "this.pending.set(client, [...",
+          "text": "A local write remains pending until a pull acknowledges it."
+        },
+        {
+          "side": "new",
+          "anchor": "this.server,",
+          "text": "Only mutations the server actually accepted change expected server state."
+        },
+        {
+          "side": "new",
+          "anchor": "this.pending.set(client, pending.slice",
+          "text": "An acknowledgement removes only writes through the acknowledged mutation."
+        },
+        {
+          "side": "new",
+          "anchor": "for (const { op } of this.pending.get(client)",
+          "text": "Expected client state combines its last received server state with its own unacknowledged writes."
+        }
+      ]
+    },
+    {
+      "heading": "5. Which handoffs may a fault drop?",
+      "commit": "eb7a3fa",
+      "file": "dst/DstSimulation.ts",
+      "hunks": ["const droppable = pending.filter(isNetworkHandoff)"],
+      "notes": [
+        {
+          "side": "old",
+          "anchor": "pending.filter((call) => !isTimerHandoff(call))",
+          "text": "Before: anything that was not a timer, including a local storage write, could be dropped."
+        },
+        {
+          "side": "new",
+          "anchor": "pending.filter(isNetworkHandoff)",
+          "text": "Now only calls crossing the client/server boundary enter the fault lottery."
+        }
+      ]
+    },
+    {
+      "heading": "6. How is a network handoff identified?",
+      "commit": "eb7a3fa",
+      "file": "dst/DstWorld.ts",
+      "hunks": ["export function isNetworkHandoff"],
+      "notes": [
+        {
+          "side": "old",
+          "anchor": "sentBy.endsWith(\"Timer\")",
+          "text": "The old predicate could only rule out timer calls; it said nothing about disk writes."
+        },
+        {
+          "side": "new",
+          "anchor": "sentBy === \"server\" || waitingFor === \"server\"",
+          "text": "A request, response, or poke has the server on one side. Timers and local storage do not."
+        }
+      ]
+    },
+    {
+      "heading": "7. How does a saved failure run again?",
+      "commit": "69a2a3a",
+      "file": "dst/DstReplay.ts",
+      "range": { "start": 95, "end": 129 },
+      "notes": [
+        {
+          "side": "new",
+          "anchor": "const expected = events.get(step)",
+          "text": "Replay reads the recorded choice for this step instead of asking the random generator again."
+        },
+        {
+          "side": "new",
+          "anchor": "const reason = cannotApply(world, expected)",
+          "text": "If that event is no longer possible, replay reports the first point of divergence."
+        },
+        {
+          "side": "new",
+          "anchor": "const actual = await world.apply(step, intentOf(expected))",
+          "text": "The same event is applied to a fresh world."
+        },
+        {
+          "side": "new",
+          "anchor": "violation = await world.check(step)",
+          "text": "The same independent check should reproduce the bug at the same step."
+        }
+      ]
+    }
+  ]
+}
