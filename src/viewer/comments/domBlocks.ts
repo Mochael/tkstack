@@ -26,7 +26,14 @@ export type DomSpan = { block: DomBlock; start: number; length: number };
  * markup. Each one is a single block named after its kind, and the prose tags
  * inside it are not counted, so fence markup never shifts prose ordinals.
  */
-const VIEW_KINDS = ["callstack", "mermaid", "file", "diff", "html"] as const;
+const VIEW_KINDS = [
+  "callstack",
+  "mermaid",
+  "flow-examples",
+  "file",
+  "diff",
+  "html",
+] as const;
 const viewSelector = VIEW_KINDS.map(
   (kind) => `[data-diffmap-kind="${kind}"]`,
 ).join(",");

@@ -106,6 +106,7 @@ import {
 | Fence info string                              | Viewer                                                                                            |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | `mermaid`                                      | Beautiful Mermaid                                                                                 |
+| `flow-examples`                                | Example inputs, function paths, value snapshots, and full source links                            |
 | `callstack` or `diff` containing `└──` / `├──` | Interactive stack rows, no file header                                                            |
 | `diff` or `diff:path` with a file path         | Pierre patch with Pierre’s file header                                                            |
 | `diff` with no path                            | Pierre patch, no file header                                                                      |
@@ -114,6 +115,13 @@ import {
 | other langs                                    | Maui `CodeBlock`                                                                                  |
 
 Fences keep whitespace. Use them for mermaid, call stacks, and diffs.
+
+`flow-examples` is a JSON fence with `title`, `nodes`, and `cases`. Each node has
+`id`, `label`, `summary`, and optionally one `source` reference such as
+`[[src/run.ts#run]]`. Each case has `id`, `label`, `input`, `result`, and an ordered
+`steps` array. A step names a node, has a `title`, and can include `detail`,
+`input`, and `output`. The viewer shows one example path at a time and links
+each step to full code. See [the Tandem simulation demo](fixtures/deterministic-simulation-flow.md).
 
 ## MDC
 
