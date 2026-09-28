@@ -1,0 +1,423 @@
+{
+  "title": "Follow one DST step through the code",
+  "orientation": "**Run:** 1 Start → 2 Read paused calls → 3 Choose one action → 4A Write or 4B Control → 5 Check. A passing step returns to 2; after the configured steps, 6 checks the settled system.\n\n**Example:** One step starts a client commit. After that step settles, the next step can see its paused call and start another write, advance it, or drop a server handoff. A mismatch can be reproduced at 7.",
+  "sections": [
+    {
+      "heading": "1. Start: execute() boots the world, then enters the step loop",
+      "input": "seed and step count",
+      "output": "two booted clients, a server, and the first call to world.pending()",
+      "blocks": [
+        {
+          "label": "The run loop",
+          "commit": "69a2a3a",
+          "file": "dst/DstSimulation.ts",
+          "range": {
+            "start": 54,
+            "end": 77
+          },
+          "addedInModifiedFile": true,
+          "notes": [
+            {
+              "side": "new",
+              "anchor": "DstWorld.start(seed)",
+              "text": "Creates the server, clients, Gatekeeper, and reference model before any step runs."
+            },
+            {
+              "side": "new",
+              "anchor": "this.choose(rng, world, world.pending(), step)",
+              "text": "Every step first reads paused calls, then chooses one possible action."
+            },
+            {
+              "side": "new",
+              "anchor": "const record = await world.apply(step, intent)",
+              "text": "The chosen action becomes a trace record; it need not finish a whole commit."
+            },
+            {
+              "side": "new",
+              "anchor": "violation = await world.check(step)",
+              "text": "After applying the action, check state before starting the next step."
+            }
+          ]
+        },
+        {
+          "label": "World setup",
+          "commit": "69a2a3a",
+          "file": "dst/DstWorld.ts",
+          "range": {
+            "start": 304,
+            "end": 323
+          },
+          "notes": [
+            {
+              "side": "new",
+              "anchor": "for (const name of clientNames) await world.boot(name)",
+              "text": "Both clients connect before fault-controlled steps begin."
+            },
+            {
+              "side": "new",
+              "anchor": "await harness.activateGates()",
+              "text": "From this point, handoffs can stop and the loop can order them."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "2. Read: world.pending() gives choose() the calls stopped right now",
+      "input": "Gatekeeper calls held at their current boundary",
+      "output": "one snapshot of named, actionable paused calls",
+      "blocks": [
+        {
+          "label": "World asks Gatekeeper",
+          "commit": "69a2a3a",
+          "file": "dst/DstWorld.ts",
+          "range": {
+            "start": 341,
+            "end": 348
+          },
+          "notes": [
+            {
+              "side": "new",
+              "anchor": ".pendingCalls()",
+              "text": "The first snapshot may be empty. Later snapshots include commits that reached a gate."
+            },
+            {
+              "side": "new",
+              "anchor": "name: this.nameCall(call)",
+              "text": "Stable names let the trace refer to the same call during replay."
+            }
+          ]
+        },
+        {
+          "label": "Gatekeeper reports only the current stop",
+          "commit": "f7fc758",
+          "file": "packages/gatekeeper/src/Gatekeeper.ts",
+          "hunks": [
+            "private pendingCalls(): readonly PendingCall[]",
+            "pendingCall(): PendingCall | undefined"
+          ],
+          "notes": [
+            {
+              "side": "new",
+              "anchor": "return [...this.calls].flatMap",
+              "text": "Each call contributes at most one current stop."
+            },
+            {
+              "side": "new",
+              "anchor": "if (this.outcome || this.controlError || this.controlling)",
+              "text": "Finished or already controlled calls are not offered to the loop."
+            },
+            {
+              "side": "new",
+              "anchor": "const interaction = this.currentInteraction()",
+              "text": "The stop says who sent the call and which service it waits for."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "3. Choose: the pending snapshot becomes one enabled action",
+      "input": "paused calls plus which clients can write, crash, or restart",
+      "output": "one set, remove, advance, drop, crash, or restart intent",
+      "blocks": [
+        {
+          "label": "Only server handoffs may be dropped",
+          "commit": "eb7a3fa",
+          "file": "dst/DstSimulation.ts",
+          "hunks": ["const droppable = pending.filter(isNetworkHandoff)"],
+          "notes": [
+            {
+              "side": "old",
+              "anchor": "pending.filter((call) => !isTimerHandoff(call))",
+              "text": "The old test could also drop a local storage write."
+            },
+            {
+              "side": "new",
+              "anchor": "pending.filter(isNetworkHandoff)",
+              "text": "The fault choice now considers only handoffs crossing the server boundary."
+            }
+          ]
+        },
+        {
+          "label": "The chooser selects one possible event",
+          "commit": "69a2a3a",
+          "file": "dst/DstSimulation.ts",
+          "range": {
+            "start": 103,
+            "end": 135
+          },
+          "addedInModifiedFile": true,
+          "notes": [
+            {
+              "side": "new",
+              "anchor": "return { type: \"drop\", call: rng.pick(droppable).name }",
+              "text": "A drop is possible only when a droppable call exists and this seeded draw selects it."
+            },
+            {
+              "side": "new",
+              "anchor": "pending.length < maxCallsInFlight",
+              "text": "A new write may start even while another call is paused."
+            },
+            {
+              "side": "new",
+              "anchor": "return { type: \"advance\", call: rng.pick(pending).name }",
+              "text": "Otherwise the loop can pick one held call to move forward."
+            }
+          ]
+        },
+        {
+          "label": "What counts as a server handoff",
+          "commit": "eb7a3fa",
+          "file": "dst/DstWorld.ts",
+          "hunks": ["export function isNetworkHandoff"],
+          "notes": [
+            {
+              "side": "new",
+              "anchor": "sentBy === \"server\" || waitingFor === \"server\"",
+              "text": "A request, reply, or poke touches the server. Local timer and disk calls do not."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "4A. If set/remove: apply() starts a commit and leaves it in flight",
+      "input": "a set or remove intent from choose()",
+      "output": "a local write plus a commit promise that can pause at a gate",
+      "blocks": [
+        {
+          "label": "Start the client mutation",
+          "commit": "69a2a3a",
+          "file": "dst/DstWorld.ts",
+          "range": {
+            "start": 458,
+            "end": 481
+          },
+          "notes": [
+            {
+              "side": "new",
+              "anchor": "const tx = client.transact()",
+              "text": "The chosen client opens a local transaction."
+            },
+            {
+              "side": "new",
+              "anchor": "this.model.wrote(intent.client",
+              "text": "The independent model records the write before any server acknowledgement."
+            },
+            {
+              "side": "new",
+              "anchor": "this.inFlight.push(client.commit(tx))",
+              "text": "The commit starts without waiting for completion. Its next stop can appear in step 2 on a later iteration."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "4B. If advance/drop/crash/restart: apply() controls one existing action",
+      "input": "a named paused call or a running/down client",
+      "output": "one call moved or failed, or one client lifecycle change",
+      "blocks": [
+        {
+          "label": "Apply the chosen branch",
+          "commit": "69a2a3a",
+          "file": "dst/DstWorld.ts",
+          "range": {
+            "start": 350,
+            "end": 389
+          },
+          "notes": [
+            {
+              "side": "new",
+              "anchor": "target.handle.continueTo(target.waitingFor)",
+              "text": "Advance releases this call toward its next boundary, where it may pause again."
+            },
+            {
+              "side": "new",
+              "anchor": "target.handle.fail(new DstFaultError",
+              "text": "Drop fails this particular handoff."
+            },
+            {
+              "side": "new",
+              "anchor": "await this.harness.crash(intent.client)",
+              "text": "Crash stops one running client."
+            },
+            {
+              "side": "new",
+              "anchor": "await this.harness.restart(intent.client)",
+              "text": "Restart creates a new client over the same durable storage."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "5. Check: settle launched work, compare state, then loop or stop",
+      "input": "effects of 4A or 4B, including any server response that arrived",
+      "output": "a violation, or another iteration beginning at step 2",
+      "blocks": [
+        {
+          "label": "Wait only for this step to settle",
+          "commit": "69a2a3a",
+          "file": "dst/DstWorld.ts",
+          "range": {
+            "start": 395,
+            "end": 399
+          },
+          "notes": [
+            {
+              "side": "new",
+              "anchor": "await settle()",
+              "text": "Promise continuations reach a stable boundary; this does not finish every commit."
+            },
+            {
+              "side": "new",
+              "anchor": "return this.checkClients(step)",
+              "text": "Then compare each running client with the reference model."
+            }
+          ]
+        },
+        {
+          "label": "Compute what a client should show",
+          "commit": "69a2a3a",
+          "file": "dst/ReferenceModel.ts",
+          "range": {
+            "start": 85,
+            "end": 92
+          },
+          "notes": [
+            {
+              "side": "new",
+              "anchor": "const state = new Map(received)",
+              "text": "Begin with the last server state this client received."
+            },
+            {
+              "side": "new",
+              "anchor": "for (const { op } of this.pending.get(client)",
+              "text": "Overlay this client’s own writes that are still unacknowledged."
+            }
+          ]
+        },
+        {
+          "label": "Compare expected with actual",
+          "commit": "69a2a3a",
+          "file": "dst/DstWorld.ts",
+          "range": {
+            "start": 525,
+            "end": 535
+          },
+          "notes": [
+            {
+              "side": "new",
+              "anchor": "const actual = this.todosOf(client)",
+              "text": "Read the real client database, independently of the model."
+            },
+            {
+              "side": "new",
+              "anchor": "return { kind: \"clientState\"",
+              "text": "A mismatch stops the run at this step; otherwise execute() starts the next iteration."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "6. Finish: drain all calls, then check clients and server together",
+      "input": "the last step’s state, or a violation already found during the loop",
+      "output": "final client/server states and a violation if either side disagrees with the model",
+      "blocks": [
+        {
+          "label": "Settle and reconnect before the final comparison",
+          "commit": "69a2a3a",
+          "file": "dst/DstWorld.ts",
+          "range": {
+            "start": 401,
+            "end": 429
+          },
+          "notes": [
+            {
+              "side": "new",
+              "anchor": "await this.drain()",
+              "text": "Release the gates and finish every in-flight call before judging the final state."
+            },
+            {
+              "side": "new",
+              "anchor": "await this.harness[name].pullFromRemote()",
+              "text": "Each client gets a final chance to receive the server’s state."
+            },
+            {
+              "side": "new",
+              "anchor": "(await this.checkServer())",
+              "text": "The final check includes the server, so two matching clients cannot hide a wrong server state."
+            },
+            {
+              "side": "new",
+              "anchor": "this.checkAccepted()",
+              "text": "Also flag writes that never reached the server."
+            }
+          ]
+        },
+        {
+          "label": "Compare the real server with the model",
+          "commit": "69a2a3a",
+          "file": "dst/DstWorld.ts",
+          "range": {
+            "start": 537,
+            "end": 542
+          },
+          "notes": [
+            {
+              "side": "new",
+              "anchor": "const actual = await this.serverTodos()",
+              "text": "Read what the real server stored."
+            },
+            {
+              "side": "new",
+              "anchor": "const expected = this.model.serverState()",
+              "text": "Compare it with mutations the model observed the server accept."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "7. If a failure is saved: replay feeds the same actions into a fresh world",
+      "input": "the recorded seed and event trace from an early or final violation",
+      "output": "the same violation, or the first point where replay diverges",
+      "blocks": [
+        {
+          "label": "Replay one recorded step",
+          "commit": "69a2a3a",
+          "file": "dst/DstReplay.ts",
+          "range": {
+            "start": 90,
+            "end": 129
+          },
+          "notes": [
+            {
+              "side": "new",
+              "anchor": "const expected = events.get(step)",
+              "text": "Replay uses the saved choice instead of drawing a new random one."
+            },
+            {
+              "side": "new",
+              "anchor": "const reason = cannotApply(world, expected)",
+              "text": "If that action is no longer possible, report divergence at this step."
+            },
+            {
+              "side": "new",
+              "anchor": "const actual = await world.apply(step, intentOf(expected))",
+              "text": "Apply the same intent to a fresh world."
+            },
+            {
+              "side": "new",
+              "anchor": "violation = await world.check(step)",
+              "text": "Run the same state check after the replayed action."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
