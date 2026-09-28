@@ -51,7 +51,40 @@ function addedExcerpt(section) {
     .slice(start - 1, end)
     .map((line) => `+${line}`)
     .join("\n");
-  return `diff --git a/${section.file} b/${section.file}\nnew file mode 100644\n--- /dev/null\n+++ b/${section.file}\n@@ -0,0 +${start},${end - start + 1} @@\n${lines}\n`;
+  if (section.addedInModifiedFile) {
+    const full = git(
+      "show",
+      "--format=",
+      "--unified=3",
+      section.commit,
+      "--",
+      section.file,
+    );
+    const newSide = new Map();
+    let newLine = 0;
+    for (const line of full.split("\n")) {
+      const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+      if (hunk) {
+        newLine = Number(hunk[1]);
+      } else if (newLine > 0 && line.startsWith("+")) {
+        newSide.set(newLine++, line.slice(1));
+      } else if (newLine > 0 && line.startsWith(" ")) {
+        newSide.set(newLine++, line.slice(1));
+      }
+    }
+    for (let line = start; line <= end; line++) {
+      if (newSide.get(line) !== source[line - 1])
+        throw new Error(
+          `Line ${line} is not on the new side of ${section.commit}:${section.file}`,
+        );
+    }
+  }
+  const oldFile = section.addedInModifiedFile
+    ? `a/${section.file}`
+    : "/dev/null";
+  const mode = section.addedInModifiedFile ? "" : "new file mode 100644\n";
+  const oldStart = section.addedInModifiedFile ? start - 1 : 0;
+  return `diff --git a/${section.file} b/${section.file}\n${mode}--- ${oldFile}\n+++ b/${section.file}\n@@ -${oldStart},0 +${start},${end - start + 1} @@\n${lines}\n`;
 }
 
 function anchorLine(patch, note, file) {
@@ -95,16 +128,19 @@ function anchorLine(patch, note, file) {
   return matches[0];
 }
 
-function codeSection(section) {
-  const patch = section.range
-    ? addedExcerpt(section)
-    : historicalPatch(section);
-  const notes = section.notes.map((note) => {
+function codeBlock(block) {
+  const patch = block.range ? addedExcerpt(block) : historicalPatch(block);
+  const notes = block.notes.map((note) => {
     if (note.text.includes("\n") || note.text.includes("\t"))
       throw new Error("Review notes must be one line");
-    return `@${note.side}:${anchorLine(patch, note, section.file)}\t${note.text}`;
+    return `@${note.side}:${anchorLine(patch, note, block.file)}\t${note.text}`;
   });
-  return `## ${section.heading}\n\n\`\`\`review-diff:${section.file}\n${notes.join("\n")}\n--- PATCH ---\n${patch.trimEnd()}\n\`\`\`\n`;
+  return `**${block.label}**\n\n\`\`\`review-diff:${block.file}\n${notes.join("\n")}\n--- PATCH ---\n${patch.trimEnd()}\n\`\`\`\n`;
+}
+
+function codeSection(section) {
+  const transition = `**Input:** ${section.input} → **Output:** ${section.output}`;
+  return `## ${section.heading}\n\n${transition}\n\n${section.blocks.map(codeBlock).join("\n")}`;
 }
 
 await mkdir(out, { recursive: true });
@@ -115,7 +151,7 @@ const [current, questions, planText] = await Promise.all([
 ]);
 const plan = JSON.parse(planText);
 const sections = plan.sections.map(codeSection);
-const codeView = `# ${plan.title}\n\n\`Tandem @ ${pin.slice(0, 7)}\` · Gatekeeper → choose a step → apply it → check state → filter faults → replay\n\n${sections.join("\n")}`;
+const codeView = `# ${plan.title}\n\n\`Tandem @ ${pin.slice(0, 7)}\`\n\n${plan.orientation}\n\n${sections.join("\n")}`;
 await Promise.all([
   writeFile(path.join(out, "00-current.md"), current),
   writeFile(path.join(out, "01-questions.md"), questions),

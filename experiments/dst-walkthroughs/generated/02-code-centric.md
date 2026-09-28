@@ -1,41 +1,122 @@
-# How DST schedules and checks a run — code review
+# Follow one DST step through the code
 
-`Tandem @ eb7a3fa` · Gatekeeper → choose a step → apply it → check state → filter faults → replay
+`Tandem @ eb7a3fa`
 
-## 1. How can the simulator see stopped calls?
+**Run:** 1 Start → 2 Read paused calls → 3 Choose one action → 4A Write or 4B Control → 5 Check. A passing step returns to 2; after the configured steps, 6 checks the settled system.
+
+**Example:** One step starts a client commit. After that step settles, the next step can see its paused call and start another write, advance it, or drop a server handoff. A mismatch can be reproduced at 7.
+
+## 1. Start: execute() boots the world, then enters the step loop
+
+**Input:** seed and step count → **Output:** two booted clients, a server, and the first call to world.pending()
+
+**The run loop**
+
+```review-diff:dst/DstSimulation.ts
+@new:57	Creates the server, clients, Gatekeeper, and reference model before any step runs.
+@new:65	Every step first reads paused calls, then chooses one possible action.
+@new:67	The chosen action becomes a trace record; it need not finish a whole commit.
+@new:73	After applying the action, check state before starting the next step.
+--- PATCH ---
+diff --git a/dst/DstSimulation.ts b/dst/DstSimulation.ts
+--- a/dst/DstSimulation.ts
++++ b/dst/DstSimulation.ts
+@@ -53,0 +54,24 @@
++	async execute(sink?: DstArtifactSink): Promise<DstRunResult> {
++		const { seed, steps } = this.options
++		sink?.write({ kind: "header", format: 1, options: this.options })
++		await using world = await DstWorld.start(seed)
++		// Drives choices only; ids come from their own streams.
++		const rng = new SimPrng(seed)
++		const trace: DstTraceRecord[] = []
++
++		let violation: DstViolation | undefined
++		let stepsCompleted = steps
++		for (let step = 0; step < steps; step++) {
++			const intent = this.choose(rng, world, world.pending(), step)
++			if (intent) {
++				const record = await world.apply(step, intent)
++				trace.push(record)
++				sink?.write({ kind: "event", ...record })
++			}
++			// Stop at the first step that disagrees with the model, so the trace
++			// ends where the bug happened.
++			violation = await world.check(step)
++			if (violation) {
++				stepsCompleted = step + 1
++				break
++			}
+```
+
+**World setup**
+
+```review-diff:dst/DstWorld.ts
+@new:321	Both clients connect before fault-controlled steps begin.
+@new:322	From this point, handoffs can stop and the loop can order them.
+--- PATCH ---
+diff --git a/dst/DstWorld.ts b/dst/DstWorld.ts
+new file mode 100644
+--- /dev/null
++++ b/dst/DstWorld.ts
+@@ -0,0 +304,20 @@
++	static async start(seed: number): Promise<DstWorld> {
++		const model = new ReferenceModel<DstClientName>()
++		const server = new TandemServer<DstSchema, {}>({
++			schema: dstSchemaDefinition,
++			relations: {},
++			storage: new InMemoryServerStorage(),
++			rng: SimPrng.idSource(seed, "server"),
++		})
++		let world: DstWorld | undefined
++		const harness = buildHarness({
++			server,
++			model,
++			// A restart runs the factory again with the next generation's ids.
++			idSource: (label) =>
++				SimPrng.idSource(seed, `${label}.${world?.generations[label] ?? 0}`),
++		})
++		world = new DstWorld(server, model, harness)
++		for (const name of clientNames) await world.boot(name)
++		await harness.activateGates()
++		return world
+```
+
+## 2. Read: world.pending() gives choose() the calls stopped right now
+
+**Input:** Gatekeeper calls held at their current boundary → **Output:** one snapshot of named, actionable paused calls
+
+**World asks Gatekeeper**
+
+```review-diff:dst/DstWorld.ts
+@new:344	The first snapshot may be empty. Later snapshots include commits that reached a gate.
+@new:345	Stable names let the trace refer to the same call during replay.
+--- PATCH ---
+diff --git a/dst/DstWorld.ts b/dst/DstWorld.ts
+new file mode 100644
+--- /dev/null
++++ b/dst/DstWorld.ts
+@@ -0,0 +341,8 @@
++	/** Calls held at a boundary, named in creation order so names never depend on choices. */
++	pending(): readonly DstPendingCall[] {
++		this.held = this.harness
++			.pendingCalls()
++			.map((call) => ({ ...call, name: this.nameCall(call) }))
++		this.maxPendingCalls = Math.max(this.maxPendingCalls, this.held.length)
++		return this.held
++	}
+```
+
+**Gatekeeper reports only the current stop**
 
 ```review-diff:packages/gatekeeper/src/Gatekeeper.ts
-@new:63	The simulator needs both ends of a handoff to know what it can advance or drop.
-@new:80	The harness exposes a snapshot of calls currently held by a gate.
-@new:262	Each call contributes at most one current stop. The scheduler never receives stale stops.
-@new:565	Finished calls and calls already being controlled are excluded; every returned call is actionable.
+@new:262	Each call contributes at most one current stop.
+@new:565	Finished or already controlled calls are not offered to the loop.
+@new:566	The stop says who sent the call and which service it waits for.
 --- PATCH ---
 diff --git a/packages/gatekeeper/src/Gatekeeper.ts b/packages/gatekeeper/src/Gatekeeper.ts
 index 9335ba7..5d4f71c 100644
 --- a/packages/gatekeeper/src/Gatekeeper.ts
 +++ b/packages/gatekeeper/src/Gatekeeper.ts
-@@ -56,6 +56,13 @@ export class CallHandle<Result> {
- 	}
- }
- 
-+export type PendingCall = {
-+	readonly handle: CallHandle<unknown>
-+	readonly label: string
-+	readonly sentBy: string
-+	readonly waitingFor: string
-+}
-+
- type AsyncMethodResult<Method> = Method extends (
- 	...args: infer Args
- ) => PromiseLike<infer Result>
-@@ -70,6 +77,7 @@ export type Harness<Services extends Record<string, object>> =
- 	AsyncDisposable & {
- 		[Name in keyof Services]: ServiceProxy<Services[Name]>
- 	} & {
-+		pendingCalls(): readonly PendingCall[]
- 		activateGates(): Promise<void>
- 		deactivateGates(): Promise<void>
- 		deactivateGatesAndSettle(): Promise<void>
 @@ -248,6 +257,11 @@ class Runtime {
  		this.calls.delete(call)
  	}
@@ -71,130 +152,164 @@ index 9335ba7..5d4f71c 100644
  			const interaction = this.requireCurrent()
 ```
 
-## 2. How does one step leave other work in flight?
+## 3. Choose: the pending snapshot becomes one enabled action
+
+**Input:** paused calls plus which clients can write, crash, or restart → **Output:** one set, remove, advance, drop, crash, or restart intent
+
+**Only server handoffs may be dropped**
 
 ```review-diff:dst/DstSimulation.ts
-@old:304	Before: one commit ran to completion within the step, so another write could not overlap it.
-@new:314	Now a write starts and stays in flight. A later step may start another write or advance this one.
-@new:325	At each step, the simulator refreshes the list of calls it can act on.
-@new:346	The cap still allows a second mutation while the first call is paused.
-@new:353	Advance releases just this call's current gate; the backend alone does not choose the whole interleaving.
+@old:100	The old test could also drop a local storage write.
+@new:100	The fault choice now considers only handoffs crossing the server boundary.
 --- PATCH ---
 diff --git a/dst/DstSimulation.ts b/dst/DstSimulation.ts
-index 5dca6fd..fe813c8 100644
+index 55b07a1..b2dfe21 100644
 --- a/dst/DstSimulation.ts
 +++ b/dst/DstSimulation.ts
-@@ -270,42 +309,54 @@ export class DstSimulation {
- 					item,
- 				})
- 			}
-+			// The handle arrives only once the commit reaches a boundary, which may
-+			// wait on another held call. Its call shows up in pendingCalls() then.
-+			inFlight.push(client.commit(tx))
-+		}
+@@ -96,8 +96,8 @@ export class DstSimulation {
+ 	): DstIntent | undefined {
+ 		const faultRate = this.options.faultRate ?? 0
+ 		const crashRate = this.options.crashRate ?? 0
+-		// Faults model lost network messages, never a timer that fails to tick.
+-		const droppable = pending.filter((call) => !isTimerHandoff(call))
++		// Faults model lost network messages, never a failed timer or disk write.
++		const droppable = pending.filter(isNetworkHandoff)
+ 		const { down, running, writers } = world
  
--			const commit = await client.commit(tx)
--
--			if (faultRate > 0 && this.rng.boolean(faultRate)) {
--				// Faults model lost network messages, so deliver this client's timer
--				// ticks until the call is held at a handoff with the server.
--				let boundary = findPending(commit)
--				while (boundary && isTimerHandoff(boundary)) {
--					await commit.continueTo(boundary.waitingFor)
--					this.trace.push({ type: "deliverTick", step, client: clientName })
--					boundary = findPending(commit)
--				}
-+		const poolOfIds = ["item-1", "item-2", "item-3"]
-+		const faultRate = this.options.faultRate ?? 0
-+		// Controls resolve when their call reaches its next boundary, which can
-+		// depend on other held calls, so a step starts them without waiting.
-+		const inFlight: Promise<unknown>[] = []
-+		let maxPendingCalls = 0
- 
--				if (boundary) {
--					const error = new Error(
--						`Simulated Network/Push Fault at step ${step}`,
--					)
--					this.trace.push({
--						type: "fault",
--						step,
--						client: clientName,
--						sentBy: boundary.sentBy,
--						waitingFor: boundary.waitingFor,
--						error: error.message,
--					})
--					await commit.fail(error)
--					await commit.result.catch(() => {})
--					continue
--				}
-+		for (let step = 0; step < this.options.steps; step++) {
-+			const pending = gatekeeper.pendingCalls()
-+			// Name calls in creation order so trace names do not depend on choices.
-+			for (const call of pending) nameCall(call)
-+			maxPendingCalls = Math.max(maxPendingCalls, pending.length)
-+			// Faults model lost network messages, never a timer that fails to tick.
-+			const droppable = pending.filter((call) => !isTimerHandoff(call))
-+
-+			if (
-+				faultRate > 0 &&
-+				droppable.length > 0 &&
-+				this.rng.boolean(faultRate)
-+			) {
-+				const target = this.rng.pick(droppable)
-+				const kind = faultKind(target, deliveredEvents.has(target.handle))
-+				const record = boundary(target)
-+				this.trace.push({ type: "drop", step, fault: kind, ...record })
-+				inFlight.push(
-+					target.handle.fail(new DstFaultError({ call: record.call, kind })),
-+				)
-+			} else if (
-+				pending.length === 0 ||
-+				(pending.length < maxCallsInFlight && this.rng.boolean(mutateRate))
-+			) {
-+				mutate(step)
-+			} else {
-+				const target = this.rng.pick(pending)
-+				this.trace.push({ type: "advance", step, ...boundary(target) })
-+				deliveredEvents.add(target.handle)
-+				inFlight.push(target.handle.continueTo(target.waitingFor))
- 			}
--
--			await commit.continueToCompletion()
--			this.trace.push({ type: "complete", step, client: clientName })
-+			await settle()
- 		}
- 
- 		await gatekeeper.deactivateGatesAndSettle()
-+		await Promise.all(inFlight)
- 
- 		const byId = (a: DstTodo, b: DstTodo) => a.id.localeCompare(b.id)
- 		for (const name of clientNames) {
+ 		// Without crashes these draw nothing, so crash-free runs are unchanged.
 ```
 
-## 3. What does an enabled event do to the test world?
+**The chooser selects one possible event**
+
+```review-diff:dst/DstSimulation.ts
+@new:111	A drop is possible only when a droppable call exists and this seeded draw selects it.
+@new:116	A new write may start even while another call is paused.
+@new:133	Otherwise the loop can pick one held call to move forward.
+--- PATCH ---
+diff --git a/dst/DstSimulation.ts b/dst/DstSimulation.ts
+--- a/dst/DstSimulation.ts
++++ b/dst/DstSimulation.ts
+@@ -102,0 +103,33 @@
++		// Without crashes these draw nothing, so crash-free runs are unchanged.
++		if (down.length > 0 && rng.boolean(restartRate)) {
++			return { type: "restart", client: rng.pick(down) }
++		}
++		if (crashRate > 0 && running.length > 0 && rng.boolean(crashRate)) {
++			return { type: "crash", client: rng.pick(running) }
++		}
++		if (faultRate > 0 && droppable.length > 0 && rng.boolean(faultRate)) {
++			return { type: "drop", call: rng.pick(droppable).name }
++		}
++		if (
++			writers.length > 0 &&
++			(pending.length === 0 ||
++				(pending.length < maxCallsInFlight && rng.boolean(mutateRate)))
++		) {
++			const client = rng.pick(writers)
++			const id = rng.pick(poolOfIds)
++			if (rng.boolean(0.2)) return { type: "remove", client, id }
++			return {
++				type: "set",
++				client,
++				item: {
++					id,
++					text: `Note ${id} (rev ${step})`,
++					done: rng.boolean(0.3),
++					priority: rng.int(1, 5),
++				},
++			}
++		}
++		if (pending.length > 0) {
++			return { type: "advance", call: rng.pick(pending).name }
++		}
++		return undefined
+```
+
+**What counts as a server handoff**
 
 ```review-diff:dst/DstWorld.ts
-@new:344	The world gives each stopped call a stable name for the saved trace and replay.
-@new:355	A set or remove begins a local client write.
-@new:359	Advance releases one handoff. The promise remains in flight if it later stops again.
-@new:366	Drop fails that exact handoff, simulating a lost network message.
-@new:379	Restart creates a new client incarnation over its durable storage.
-@new:398	After each event settles, compare observed state with an independent model.
+@new:175	A request, reply, or poke touches the server. Local timer and disk calls do not.
+--- PATCH ---
+diff --git a/dst/DstWorld.ts b/dst/DstWorld.ts
+index ba94ca3..e82d0a6 100644
+--- a/dst/DstWorld.ts
++++ b/dst/DstWorld.ts
+@@ -167,8 +167,12 @@ class DstTimer implements TimerApi {
+ 
+ const timerGates = { gates: { enter: false, exit: true } }
+ 
+-export function isTimerHandoff({ sentBy, waitingFor }: PendingCall): boolean {
+-	return sentBy.endsWith("Timer") || waitingFor.endsWith("Timer")
++/**
++ * A handoff that crosses the network: a request to the server, its reply, or a
++ * poke. Timer ticks and storage writes are local, so a fault never drops them.
++ */
++export function isNetworkHandoff({ sentBy, waitingFor }: PendingCall): boolean {
++	return sentBy === "server" || waitingFor === "server"
+ }
+ 
+ export const clientNames = ["client1", "client2"] as const
+```
+
+## 4A. If set/remove: apply() starts a commit and leaves it in flight
+
+**Input:** a set or remove intent from choose() → **Output:** a local write plus a commit promise that can pause at a gate
+
+**Start the client mutation**
+
+```review-diff:dst/DstWorld.ts
+@new:463	The chosen client opens a local transaction.
+@new:475	The independent model records the write before any server acknowledgement.
+@new:479	The commit starts without waiting for completion. Its next stop can appear in step 2 on a later iteration.
 --- PATCH ---
 diff --git a/dst/DstWorld.ts b/dst/DstWorld.ts
 new file mode 100644
 --- /dev/null
 +++ b/dst/DstWorld.ts
-@@ -0,0 +341,59 @@
-+	/** Calls held at a boundary, named in creation order so names never depend on choices. */
-+	pending(): readonly DstPendingCall[] {
-+		this.held = this.harness
-+			.pendingCalls()
-+			.map((call) => ({ ...call, name: this.nameCall(call) }))
-+		this.maxPendingCalls = Math.max(this.maxPendingCalls, this.held.length)
-+		return this.held
+@@ -0,0 +458,24 @@
++	private write(
++		step: number,
++		intent: Extract<DstIntent, { type: "set" | "remove" }>,
++	): DstTraceRecord {
++		const client = this.harness[intent.client]
++		const tx = client.transact()
++		let op: DstOp
++		if (intent.type === "remove") {
++			tx.remove("todos", intent.id)
++			op = { type: "remove", id: intent.id }
++		} else {
++			tx.set("todos", intent.item)
++			op = { type: "set", item: intent.item }
++		}
++		// Removing a record the client does not show records no op, so nothing
++		// is written or synced.
++		if (tx.ops.length > 0) {
++			this.model.wrote(intent.client, { mutationId: tx.tupleDbTx.id, op })
++		}
++		// The handle arrives only once the commit reaches a boundary, which may
++		// wait on another held call. Its call shows up in pending() then.
++		this.inFlight.push(client.commit(tx))
++		return { ...intent, step, mutationId: tx.tupleDbTx.id }
 +	}
-+
+```
+
+## 4B. If advance/drop/crash/restart: apply() controls one existing action
+
+**Input:** a named paused call or a running/down client → **Output:** one call moved or failed, or one client lifecycle change
+
+**Apply the chosen branch**
+
+```review-diff:dst/DstWorld.ts
+@new:359	Advance releases this call toward its next boundary, where it may pause again.
+@new:366	Drop fails this particular handoff.
+@new:374	Crash stops one running client.
+@new:379	Restart creates a new client over the same durable storage.
+--- PATCH ---
+diff --git a/dst/DstWorld.ts b/dst/DstWorld.ts
+new file mode 100644
+--- /dev/null
++++ b/dst/DstWorld.ts
+@@ -0,0 +350,40 @@
 +	/** Applies one event and returns its trace record. */
 +	async apply(step: number, intent: DstIntent): Promise<DstTraceRecord> {
 +		switch (intent.type) {
@@ -235,11 +350,23 @@ new file mode 100644
 +			}
 +		}
 +	}
-+
-+	hasPending(call: string): boolean {
-+		return this.held.some(({ name }) => name === call)
-+	}
-+
+```
+
+## 5. Check: settle launched work, compare state, then loop or stop
+
+**Input:** effects of 4A or 4B, including any server response that arrived → **Output:** a violation, or another iteration beginning at step 2
+
+**Wait only for this step to settle**
+
+```review-diff:dst/DstWorld.ts
+@new:397	Promise continuations reach a stable boundary; this does not finish every commit.
+@new:398	Then compare each running client with the reference model.
+--- PATCH ---
+diff --git a/dst/DstWorld.ts b/dst/DstWorld.ts
+new file mode 100644
+--- /dev/null
++++ b/dst/DstWorld.ts
+@@ -0,0 +395,5 @@
 +	/** Lets the step settle, then checks every running client against the model. */
 +	async check(step: number): Promise<DstViolation | undefined> {
 +		await settle()
@@ -247,74 +374,17 @@ new file mode 100644
 +	}
 ```
 
-## 4. What state should the clients and server have?
+**Compute what a client should show**
 
 ```review-diff:dst/ReferenceModel.ts
-@new:32	The model tracks server state independently from Tandem's implementation.
-@new:37	A local write remains pending until a pull acknowledges it.
-@new:46	Only mutations the server actually accepted change expected server state.
-@new:75	An acknowledgement removes only writes through the acknowledged mutation.
-@new:90	Expected client state combines its last received server state with its own unacknowledged writes.
+@new:89	Begin with the last server state this client received.
+@new:90	Overlay this client’s own writes that are still unacknowledged.
 --- PATCH ---
 diff --git a/dst/ReferenceModel.ts b/dst/ReferenceModel.ts
 new file mode 100644
 --- /dev/null
 +++ b/dst/ReferenceModel.ts
-@@ -0,0 +31,70 @@
-+export class ReferenceModel<Client extends string> {
-+	private readonly server = new Map<string, DstTodo>()
-+	private readonly pending = new Map<Client, DstWrite[]>()
-+	private readonly received = new Map<Client, Map<string, DstTodo>>()
-+
-+	wrote(client: Client, write: DstWrite): void {
-+		this.pending.set(client, [...(this.pending.get(client) ?? []), write])
-+	}
-+
-+	/** The server committed these mutations. */
-+	accepted(mutations: readonly Mutation<DstSchema>[]): void {
-+		for (const { ops } of mutations) {
-+			for (const op of ops) {
-+				if (op.collection !== "todos") continue
-+				apply(
-+					this.server,
-+					op.type === "set"
-+						? { type: "set", item: op.value }
-+						: { type: "remove", id: String(op.id) },
-+				)
-+			}
-+		}
-+	}
-+
-+	/** A pull response reached the client. */
-+	pulled(client: Client, args: PullArgs, response: PullResponse): void {
-+		// The server re-reads the window, and sends all of it, whenever the
-+		// client's cookie is stale. Otherwise the response changes nothing.
-+		if (args.cookie === undefined || response.cookie !== args.cookie) {
-+			this.received.set(
-+				client,
-+				new Map(
-+					(response.patch.set ?? [])
-+						.filter((record) => record.collection === "todos")
-+						.map(({ value }) => [value.id, value]),
-+				),
-+			)
-+		}
-+		if (response.lastMutationId === undefined) return
-+		const pending = this.pending.get(client) ?? []
-+		const acknowledged = pending.findIndex(
-+			({ mutationId }) => mutationId === response.lastMutationId,
-+		)
-+		if (acknowledged >= 0) {
-+			this.pending.set(client, pending.slice(acknowledged + 1))
-+		}
-+	}
-+
-+	/** A crash forgets the incarnation; the restarted one must pull again. */
-+	crashed(client: Client): void {
-+		this.pending.delete(client)
-+		this.received.delete(client)
-+	}
-+
+@@ -0,0 +85,8 @@
 +	/** What the client should show now, or undefined before its first pull. */
 +	expected(client: Client): DstTodo[] | undefined {
 +		const received = this.received.get(client)
@@ -323,79 +393,121 @@ new file mode 100644
 +		for (const { op } of this.pending.get(client) ?? []) apply(state, op)
 +		return [...state.values()].sort(byId)
 +	}
-+
-+	serverState(): DstTodo[] {
-+		return [...this.server.values()].sort(byId)
-+	}
-+
-+	unacknowledged(client: Client): readonly DstWrite[] {
-+		return this.pending.get(client) ?? []
-+	}
 ```
 
-## 5. Which handoffs may a fault drop?
-
-```review-diff:dst/DstSimulation.ts
-@old:100	Before: anything that was not a timer, including a local storage write, could be dropped.
-@new:100	Now only calls crossing the client/server boundary enter the fault lottery.
---- PATCH ---
-diff --git a/dst/DstSimulation.ts b/dst/DstSimulation.ts
-index 55b07a1..b2dfe21 100644
---- a/dst/DstSimulation.ts
-+++ b/dst/DstSimulation.ts
-@@ -96,8 +96,8 @@ export class DstSimulation {
- 	): DstIntent | undefined {
- 		const faultRate = this.options.faultRate ?? 0
- 		const crashRate = this.options.crashRate ?? 0
--		// Faults model lost network messages, never a timer that fails to tick.
--		const droppable = pending.filter((call) => !isTimerHandoff(call))
-+		// Faults model lost network messages, never a failed timer or disk write.
-+		const droppable = pending.filter(isNetworkHandoff)
- 		const { down, running, writers } = world
- 
- 		// Without crashes these draw nothing, so crash-free runs are unchanged.
-```
-
-## 6. How is a network handoff identified?
+**Compare expected with actual**
 
 ```review-diff:dst/DstWorld.ts
-@old:171	The old predicate could only rule out timer calls; it said nothing about disk writes.
-@new:175	A request, response, or poke has the server on one side. Timers and local storage do not.
+@new:529	Read the real client database, independently of the model.
+@new:531	A mismatch stops the run at this step; otherwise execute() starts the next iteration.
 --- PATCH ---
 diff --git a/dst/DstWorld.ts b/dst/DstWorld.ts
-index ba94ca3..e82d0a6 100644
---- a/dst/DstWorld.ts
+new file mode 100644
+--- /dev/null
 +++ b/dst/DstWorld.ts
-@@ -167,8 +167,12 @@ class DstTimer implements TimerApi {
- 
- const timerGates = { gates: { enter: false, exit: true } }
- 
--export function isTimerHandoff({ sentBy, waitingFor }: PendingCall): boolean {
--	return sentBy.endsWith("Timer") || waitingFor.endsWith("Timer")
-+/**
-+ * A handoff that crosses the network: a request to the server, its reply, or a
-+ * poke. Timer ticks and storage writes are local, so a fault never drops them.
-+ */
-+export function isNetworkHandoff({ sentBy, waitingFor }: PendingCall): boolean {
-+	return sentBy === "server" || waitingFor === "server"
- }
- 
- export const clientNames = ["client1", "client2"] as const
+@@ -0,0 +525,11 @@
++	private checkClients(step: number | "quiescence"): DstViolation | undefined {
++		for (const client of this.running) {
++			const expected = this.model.expected(client)
++			if (!expected) continue
++			const actual = this.todosOf(client)
++			if (JSON.stringify(actual) !== JSON.stringify(expected)) {
++				return { kind: "clientState", step, client, expected, actual }
++			}
++		}
++		return undefined
++	}
 ```
 
-## 7. How does a saved failure run again?
+## 6. Finish: drain all calls, then check clients and server together
+
+**Input:** the last step’s state, or a violation already found during the loop → **Output:** final client/server states and a violation if either side disagrees with the model
+
+**Settle and reconnect before the final comparison**
+
+```review-diff:dst/DstWorld.ts
+@new:406	Release the gates and finish every in-flight call before judging the final state.
+@new:422	Each client gets a final chance to receive the server’s state.
+@new:427	The final check includes the server, so two matching clients cannot hide a wrong server state.
+@new:428	Also flag writes that never reached the server.
+--- PATCH ---
+diff --git a/dst/DstWorld.ts b/dst/DstWorld.ts
+new file mode 100644
+--- /dev/null
++++ b/dst/DstWorld.ts
+@@ -0,0 +401,29 @@
++	/**
++	 * Ends the run. Without a violation, restarts and reconnects every client and
++	 * checks the settled system; with one, only drains what is in flight.
++	 */
++	async finish(violation: DstViolation | undefined): Promise<DstOutcome> {
++		await this.drain()
++
++		if (!violation) {
++			for (const name of this.down) {
++				this.crashed.delete(name)
++				this.generations[name] += 1
++				await this.harness.restart(name)
++				await this.boot(name)
++			}
++			for (const name of this.unconnected) {
++				await (
++					await this.harness[name].connect()
++				).result
++			}
++			for (const name of clientNames) {
++				await (
++					await this.harness[name].pullFromRemote()
++				).result
++			}
++			violation =
++				this.checkClients("quiescence") ??
++				(await this.checkServer()) ??
++				this.checkAccepted()
++		}
+```
+
+**Compare the real server with the model**
+
+```review-diff:dst/DstWorld.ts
+@new:538	Read what the real server stored.
+@new:539	Compare it with mutations the model observed the server accept.
+--- PATCH ---
+diff --git a/dst/DstWorld.ts b/dst/DstWorld.ts
+new file mode 100644
+--- /dev/null
++++ b/dst/DstWorld.ts
+@@ -0,0 +537,6 @@
++	private async checkServer(): Promise<DstViolation | undefined> {
++		const actual = await this.serverTodos()
++		const expected = this.model.serverState()
++		if (JSON.stringify(actual) === JSON.stringify(expected)) return undefined
++		return { kind: "serverState", expected, actual }
++	}
+```
+
+## 7. If a failure is saved: replay feeds the same actions into a fresh world
+
+**Input:** the recorded seed and event trace from an early or final violation → **Output:** the same violation, or the first point where replay diverges
+
+**Replay one recorded step**
 
 ```review-diff:dst/DstReplay.ts
-@new:99	Replay reads the recorded choice for this step instead of asking the random generator again.
-@new:101	If that event is no longer possible, replay reports the first point of divergence.
-@new:110	The same event is applied to a fresh world.
-@new:125	The same independent check should reproduce the bug at the same step.
+@new:99	Replay uses the saved choice instead of drawing a new random one.
+@new:101	If that action is no longer possible, report divergence at this step.
+@new:110	Apply the same intent to a fresh world.
+@new:125	Run the same state check after the replayed action.
 --- PATCH ---
 diff --git a/dst/DstReplay.ts b/dst/DstReplay.ts
 new file mode 100644
 --- /dev/null
 +++ b/dst/DstReplay.ts
-@@ -0,0 +95,35 @@
+@@ -0,0 +90,40 @@
++	await using world = await DstWorld.start(artifact.options.seed)
++	const events = new Map(artifact.trace.map((record) => [record.step, record]))
++	const steps =
++		artifact.outcome?.stepsCompleted ?? (artifact.trace.at(-1)?.step ?? -1) + 1
++
 +	let violation: DstViolation | undefined
 +	let stepsCompleted = steps
 +	for (let step = 0; step < steps; step++) {
